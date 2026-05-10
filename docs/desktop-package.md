@@ -82,7 +82,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build-all.ps1
 
 ## 发版前可复现验证（当前 PR 验收）
 
-桌面端自动更新链路依赖 Windows NSIS 安装产物、`latest.yml` 与 `*.blockmap` 元数据。建议在变更提交前先补一遍本地验证命令：
+桌面端自动更新链路依赖 Windows NSIS 安装产物、`latest.yml` 与 `*.blockmap` 元数据。当前桌面 CI 不覆盖 `desktop-release` 打包产物可发布链路，提交前建议补充如下本地验证：
 
 1. 先构建 Web 静态产物（桌面端主窗口与设置页入口依赖）
 
@@ -109,7 +109,33 @@ ls -1 dist | sort
 ls -1 dist/*.yml dist/*.blockmap 2>/dev/null || true
 ```
 
-4. Windows/NSIS 产物（`*.exe`）及 GitHub Release 侧元数据一致性，请在 Windows 环境通过现有 `.github/workflows/desktop-release.yml` 的发布链路复核。
+4. 强制对齐版本与发布附件（可在 Windows 环境或能产出 NSIS 产物的执行器上复核）
+
+```bash
+RELEASE_TAG="v$(node -p \"require('./package.json').version\")"
+REPO="ZhuLinsen/daily_stock_analysis"
+
+for f in dist/*latest.yml dist/*.blockmap dist/*Setup*.exe; do
+  [ -f \"$f\" ] && echo \"[FOUND] $f\"
+done
+
+if [ -f dist/latest.yml ]; then
+  echo \"---- latest.yml 版本片段 ----\"
+  grep -E \"^version:|^files:|^sha512:\" dist/latest.yml
+fi
+
+echo \"---- Release 清单（人工核对）----\"
+echo \"Release Tag: $RELEASE_TAG\"
+echo \"Release 地址: https://github.com/$REPO/releases/tag/$RELEASE_TAG\"
+echo \"应核对附件是否包含:\"
+echo \"- daily-stock-analysis-windows-installer-*.exe\"
+echo \"- *Setup*.exe\"
+echo \"- latest.yml\"
+echo \"- *.blockmap\"
+echo \"并确保 latest.yml 中 version 与 tag 的语义化版本一致\"
+```
+
+5. Windows/NSIS 产物与 GitHub Release 元数据一致性请在 Windows 环境通过 `.github/workflows/desktop-release.yml` 的发布链路复核（可人工触发 workflow）。
 
 ### 分步打包
 

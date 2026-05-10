@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [文档] 补充 Longbridge 冷却开关与调度启动兼容语义说明。
 - [新功能] Windows 桌面安装版接入 electron-updater，发现新版本后可后台下载并在用户确认后重启安装；Release 工作流同步上传自动更新所需元数据。
 - [测试] 完善桌面端更新链路验收说明：补充 `apps/dsa-desktop` 与打包产物元数据的本地验证步骤（Web 构建、桌面测试/构建、`latest.yml` 与 `*.blockmap` 检查），并明确 Windows/NSIS 部分需在 Windows 发布链路复核。
+- [文档] 强化桌面打包文档：补充 `latest.yml` / `*.blockmap` 与 `desktop-release` tag/version 一致性核验清单，明确非 Windows 环境下需在平台限制里补充说明。
+- [修复] 清理提交中的临时探测文件（`node_modules_exists.txt` 与 `node_modules_ls_check.txt`），避免污染桌面/前端改动范围。
 
 - [新功能] Web 系统设置页开放 `.env` 配置备份导入/导出，复用键级覆盖、配置版本冲突保护和重载链路；Web 端在 `ADMIN_AUTH_ENABLED=false` 时该入口为禁用状态。
 - [chore] 精简仓库根目录：将文档图片资源迁入 `docs/assets/`，将东方财富请求补丁迁入 `src/patches/`，并下移 CI 专用依赖文件与技能适配服务。
