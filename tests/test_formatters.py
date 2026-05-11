@@ -220,3 +220,16 @@ class TestFeishuMarkdownFormatter(unittest.TestCase):
         self.assertIn('"tag": "note"', serialized)
         self.assertNotIn("```", serialized)
         self.assertNotIn("| 指标 |", serialized)
+
+    def test_card_table_preserves_escaped_literal_pipes(self):
+        content = """| 类型 | 标题 | 备注 |
+| --- | --- | --- |
+| 新闻 | AI \\| chips | 后续 |
+"""
+        elements = build_feishu_card_elements(content)
+        column_set = next(element for element in elements if element["tag"] == "column_set")
+        serialized = json.dumps(elements, ensure_ascii=False)
+
+        self.assertEqual(len(column_set["columns"]), 3)
+        self.assertIn("AI | chips", serialized)
+        self.assertIn("后续", serialized)

@@ -1961,8 +1961,9 @@ class AkshareFetcher(BaseFetcher):
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
             if '首次封板时间' in df.columns:
-                df['首次封板时间'] = df['首次封板时间'].astype(str)
-            sort_cols = [col for col in ('连板数', '首次封板时间') if col in df.columns]
+                df['首次封板时间'] = df['首次封板时间'].map(self._normalize_limit_time_value)
+                df['_首次封板时间排序'] = df['首次封板时间'].where(df['首次封板时间'] != '', '999999')
+            sort_cols = [col for col in ('连板数', '_首次封板时间排序') if col in df.columns]
             if sort_cols:
                 ascending = [False if col == '连板数' else True for col in sort_cols]
                 df = df.sort_values(sort_cols, ascending=ascending)
@@ -1988,6 +1989,35 @@ class AkshareFetcher(BaseFetcher):
         except Exception as e:
             logger.warning(f"[Akshare] 获取涨停池失败: {e}")
             return None
+
+    @staticmethod
+    def _normalize_limit_time_value(value: Any) -> str:
+        """Normalize AkShare HHMMSS-like seal time values to zero-padded HHMMSS."""
+        try:
+            if pd.isna(value):
+                return ""
+        except TypeError:
+            pass
+
+        text = str(value).strip()
+        if not text or text.lower() in {"nan", "nat", "none", "null", "-", "--"}:
+            return ""
+
+        if ":" in text:
+            parts = text.split(":")
+            try:
+                hour = int(parts[0])
+                minute = int(parts[1]) if len(parts) > 1 else 0
+                second = int(parts[2]) if len(parts) > 2 else 0
+                return f"{hour:02d}{minute:02d}{second:02d}"
+            except (TypeError, ValueError):
+                return text
+
+        try:
+            return f"{int(float(text)):06d}"
+        except (TypeError, ValueError):
+            digits = "".join(ch for ch in text if ch.isdigit())
+            return digits.zfill(6) if digits else text
 
     @staticmethod
     def _safe_float(value: Any) -> Optional[float]:

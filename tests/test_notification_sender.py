@@ -240,6 +240,28 @@ class TestFeishuSender(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(mock_post.call_count, 2)
 
+    @mock.patch("src.notification_sender.feishu_sender.time.sleep", return_value=None)
+    @mock.patch("src.notification_sender.feishu_sender.format_feishu_markdown", return_value="F" * 180)
+    @mock.patch("src.notification_sender.feishu_sender.requests.post")
+    def test_card_failure_chunks_oversized_fallback_text(self, mock_post, mock_format, _mock_sleep):
+        mock_post.side_effect = (
+            [_response(200, {"code": 19024, "msg": "card failed"})]
+            + [_response(200, {"code": 0}) for _ in range(10)]
+        )
+        cfg = _config(feishu_webhook_url="https://feishu.example/hook", feishu_max_bytes=100)
+        sender = FeishuSender(cfg)
+
+        result = sender.send_to_feishu("short")
+
+        self.assertTrue(result)
+        mock_format.assert_called_once_with("short")
+        self.assertGreater(mock_post.call_count, 2)
+        self.assertEqual(mock_post.call_args_list[0].kwargs["json"]["msg_type"], "interactive")
+        for call in mock_post.call_args_list[1:]:
+            payload = call.kwargs["json"]
+            self.assertEqual(payload["msg_type"], "text")
+            self.assertLessEqual(len(payload["content"]["text"].encode("utf-8")), 100)
+
     @mock.patch("src.notification_sender.feishu_sender.requests.post")
     def test_send_with_keyword_that_leaves_too_little_chunk_budget_returns_false(self, mock_post):
         cfg = _config(

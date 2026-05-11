@@ -265,6 +265,43 @@ def _bytes(s: str) -> int:
     return len(s.encode('utf-8'))
 
 
+def _is_escaped_pipe(value: str, index: int) -> bool:
+    """Return whether value[index] is escaped by an odd number of backslashes."""
+    slash_count = 0
+    pos = index - 1
+    while pos >= 0 and value[pos] == "\\":
+        slash_count += 1
+        pos -= 1
+    return slash_count % 2 == 1
+
+
+def _parse_markdown_table_row(row: str) -> List[str]:
+    """Split a Markdown table row while preserving escaped literal pipes."""
+    value = row.strip()
+    if value.startswith("|"):
+        value = value[1:]
+    if value.endswith("|") and not _is_escaped_pipe(value, len(value) - 1):
+        value = value[:-1]
+
+    cells: List[str] = []
+    current: List[str] = []
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if char == "\\" and index + 1 < len(value) and value[index + 1] == "|":
+            current.append("|")
+            index += 2
+            continue
+        if char == "|":
+            cells.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+        index += 1
+    cells.append("".join(current).strip())
+    return cells
+
+
 def _chunk_by_max_bytes(content: str, max_bytes: int) -> List[str]:
     if _bytes(content) <= max_bytes:
         return [content]
@@ -421,7 +458,7 @@ def format_feishu_markdown(content: str) -> str:
         >>> print(formatted)
         **标题**
         > 引用
-        ```text
+        ```
         列1  列2
         值1  值2
         ```
@@ -458,8 +495,7 @@ def format_feishu_markdown(content: str) -> str:
 
         def _parse_row(row: str) -> List[str]:
             """解析表格行，提取单元格"""
-            cells = [c.strip() for c in row.strip().strip('|').split('|')]
-            return cells
+            return _parse_markdown_table_row(row)
 
         rows = []
         for raw in buffer:
@@ -545,7 +581,7 @@ def build_feishu_card_elements(content: str) -> List[Dict[str, Any]]:
         return bool(re.match(r'^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$', row))
 
     def _parse_table_row(row: str) -> List[str]:
-        return [cell.strip() for cell in row.strip().strip("|").split("|")]
+        return _parse_markdown_table_row(row)
 
     def _text(content_value: str, tag: str = "lark_md") -> Dict[str, str]:
         return {"tag": tag, "content": content_value}
