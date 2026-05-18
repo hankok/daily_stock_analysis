@@ -954,7 +954,7 @@ PUSHOVER_API_TOKEN=your_api_token
   - `requirements.txt` 中 `litellm>=1.80.10,!=1.82.7,!=1.82.8,<2.0.0`
   - 回归用例：`tests/test_analysis_api_contract.py`、`tests/test_analysis_history.py`、`tests/test_market_review.py`、`tests/test_notification_diagnostics.py`、`tests/test_feishu_doc.py`
   - 官方来源：<https://docs.litellm.ai/docs/providers/openai_compatible>、<https://platform.openai.com/docs/api-reference/chat/create>
-- PR 描述需记录实际验证结果：优先引用本次 CI 的 `backend-gate` 与 `docker-build` 结论；若未同步，请补充 `./scripts/ci_gate.sh` 执行结果；此外至少附上 `python main.py --check-notify`，必要时再补充 `python -m py_compile src/feishu_doc.py src/schemas/report_delivery.py src/services/notification_diagnostics.py`，以及 `python -m pytest -m "not network" tests/test_notification_diagnostics.py tests/test_feishu_doc.py`。
+- PR 描述需记录实际验证结果：不得仅保留 `git diff --check`；优先引用本次 CI 的 `backend-gate` 与 `docker-build` 结论；若未同步，请补充 `./scripts/ci_gate.sh` 执行结果；此外至少附上 `python main.py --check-notify`，必要时再补充 `python -m py_compile src/feishu_doc.py src/schemas/report_delivery.py src/services/notification_diagnostics.py`，以及 `python -m pytest -m "not network" tests/test_notification_diagnostics.py tests/test_feishu_doc.py`。
 
 ---
 

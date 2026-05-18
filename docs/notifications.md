@@ -143,7 +143,7 @@ package 的 `metadata` 会过滤疑似敏感键，例如 token、secret、passwo
 - 若结构化检测提示外部模型/API 或运行时配置迁移风险，PR 描述需明确该提示来自既有静态检测规则覆盖新增通知配置项，不代表本轮改动模型名、provider、Base URL、LLM 路由、`.env` 持久化迁移或旧配置清理语义。
 - PR 描述需写明仓库内依据：通知链路边界以本文档、`docs/full-guide*.md`、`requirements.txt` 中 LiteLLM 依赖窗口，以及 `tests/test_notification_diagnostics.py`、`tests/test_feishu_doc.py` 的回归覆盖为准。
 - 回退方式：回退本次 PR 即可恢复旧行为；如要逐项回退可清理 `NOTIFICATION_*`、`MARKDOWN_TO_IMAGE_CHANNELS` 等新增配置项，不需要执行模型/API 配置迁移。
-- PR 描述需补充实际验证结果：优先引用本次 CI 的 `backend-gate` 与 `docker-build` 结论；若未同步到 PR 说明，请本地补充 `./scripts/ci_gate.sh` 并写明执行结果；此外至少需附上 `python main.py --check-notify`，必要时再补充 `python -m py_compile src/feishu_doc.py src/schemas/report_delivery.py src/services/notification_diagnostics.py` 与 `python -m pytest -m "not network" tests/test_notification_diagnostics.py tests/test_feishu_doc.py`。
+- PR 描述需补充实际验证结果：不得仅保留 `git diff --check`；优先引用本次 CI 的 `backend-gate` 与 `docker-build` 结论；若未同步到 PR 说明，请本地补充 `./scripts/ci_gate.sh` 并写明执行结果；此外至少需附上 `python main.py --check-notify`，必要时再补充 `python -m py_compile src/feishu_doc.py src/schemas/report_delivery.py src/services/notification_diagnostics.py` 与 `python -m pytest -m "not network" tests/test_notification_diagnostics.py tests/test_feishu_doc.py`。
 - PR 描述中的外部模型/API 风险命中排除依据建议补充为：未新增模型名、provider、Base URL 或 LiteLLM 路由改动；边界以仓库内 `requirements.txt` 依赖窗口 + `docs/LLM_CONFIG_GUIDE*.md` + `tests/test_notification_diagnostics.py`/`tests/test_feishu_doc.py` + 官方文档（<https://docs.litellm.ai/docs/providers/openai_compatible>、<https://platform.openai.com/docs/api-reference/chat>）为准。
 - 建议补充的兼容性验证证据（可选其二）：
   - `tests/test_analysis_api_contract.py`、`tests/test_analysis_history.py`、`tests/test_market_review.py`：确认未改动模型/provider/Base URL 的运行时兼容链路。
