@@ -623,7 +623,6 @@ def register_fallback_model_pricing(models: Iterable[str]) -> None:
     """Register zero-cost pricing for unknown OpenAI-compatible models."""
     if not models:
         return
-    LLMToolAdapter._register_custom_model_pricing()
     register = getattr(litellm, "register_model", None)
     if not callable(register):
         return
@@ -636,7 +635,11 @@ def register_fallback_model_pricing(models: Iterable[str]) -> None:
             continue
         if not wire_model or wire_model.startswith("__legacy_"):
             continue
-        if wire_model in cost_map or wire_model in _FALLBACK_MODEL_PRICING_REGISTERED:
+        if (
+            wire_model in _CUSTOM_MODEL_PRICING
+            or wire_model in cost_map
+            or wire_model in _FALLBACK_MODEL_PRICING_REGISTERED
+        ):
             continue
         try:
             register({wire_model: dict(_FALLBACK_MODEL_PRICING)})
