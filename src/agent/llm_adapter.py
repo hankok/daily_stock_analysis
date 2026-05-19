@@ -23,6 +23,7 @@ from src.config import (
     get_configured_llm_models,
     get_effective_agent_models_to_try,
     get_effective_agent_primary_model,
+    resolve_litellm_wire_model,
 )
 from src.llm.errors import call_litellm_with_param_recovery
 from src.llm.generation_params import apply_litellm_generation_params
@@ -463,6 +464,9 @@ class LLMToolAdapter:
             self._get_temperature() if temperature is None else temperature,
             model_list=recovery_model_list,
         )
+        register_fallback_model_pricing([
+            resolve_litellm_wire_model(model, self._config.llm_model_list)
+        ])
         if use_channel_router and self._router and model in _router_model_names:
             # Channel / YAML path: Router manages all models in its model_list
             response = call_litellm_with_param_recovery(
