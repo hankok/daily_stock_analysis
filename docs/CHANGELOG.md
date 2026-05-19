@@ -32,8 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [改进] 将 RSI 计算口径从 SMA 调整为 Wilder's EMA / SMMA，统一分析报告与告警阈值口径。
 - [改进] 大盘复盘将红绿灯与盘面温度合并为终端友好的盘面信号分数，移除色块进度条与重复温度行。
 - [改进] 大盘复盘近三日市场线索改为标题与来源链接列表，移除摘要片段，降低中英混排和误读风险。
+- [修复] 持仓快照实时行情重算：当日快照先按实时行情重算估值并回传价格元数据，实时价缺失时退回收盘价/历史快照，避免 stale 价格污染市值与未实现盈亏。
 - [修复] 为 OpenAI-compatible 渠道补充 MiMo / LiteLLM fallback pricing 注册路径：在 Tool / Analyzer / 系统配置联调测试路径复用 `register_fallback_model_pricing`，避免未知模型因缺失计费信息导致调用失败。
 - [文档] 同步说明 fallback pricing 注册与 MiniMax / 小米 MiMo 兼容配置边界，补充相关 provider 示例与回退触发条件，限定为本次 #1282 修复范围内更新。
+- [新功能] 告警中心 P5 技术指标规则：扩展 Alert API 与告警中心，新增 MA / RSI / MACD / KDJ / CCI 等日线技术指标告警能力，并沿用 P2-P4 的触发历史与通知冷却链路。
 
 ## [3.17.1] - 2026-05-16
 
