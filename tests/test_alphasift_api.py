@@ -58,7 +58,17 @@ class AlphaSiftOpportunitiesApiTestCase(unittest.TestCase):
             payload = alphasift_endpoint.alphasift_status(config=config)
 
         self.assertEqual(payload["enabled"], False)
-        self.assertEqual(payload["install_spec"], DEFAULT_ALPHASIFT_TEST_SPEC)
+        self.assertEqual(payload["install_spec_is_default"], True)
+        self.assertNotIn("install_spec", payload)
+
+    def test_status_marks_custom_install_source(self) -> None:
+        config = self._config(enabled=False, install_spec="git+https://example.com/private/alphasift.git")
+
+        with patch("api.v1.endpoints.alphasift._is_alphasift_available", return_value=False):
+            payload = alphasift_endpoint.alphasift_status(config=config)
+
+        self.assertEqual(payload["install_spec_is_default"], False)
+        self.assertNotIn("install_spec", payload)
 
     def test_screen_rejects_when_disabled(self) -> None:
         config = self._config(enabled=False)

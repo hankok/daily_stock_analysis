@@ -31,7 +31,7 @@ def alphasift_status(config: Config = Depends(get_config_dep)) -> Dict[str, Any]
     return {
         "enabled": bool(config.alphasift_enabled),
         "available": _is_alphasift_available(),
-        "install_spec": config.alphasift_install_spec,
+        "install_spec_is_default": _is_default_alphasift_install_spec(config.alphasift_install_spec),
     }
 
 
@@ -204,3 +204,7 @@ def _to_plain(value: Any) -> Any:
     if isinstance(value, list):
         return [_to_plain(item) for item in value]
     return value
+
+
+def _is_default_alphasift_install_spec(install_spec: str) -> bool:
+    return (install_spec or "").strip() == DEFAULT_ALPHASIFT_INSTALL_SPEC
