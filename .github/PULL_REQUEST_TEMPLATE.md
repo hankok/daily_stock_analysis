@@ -12,13 +12,11 @@ For English contributors: please fill in English. All fields marked (EN) accept 
 - [ ] chore
 - [ ] test
 
-> 文档 / 治理类边界澄清 PR（例如本 issue）只能选择 `docs`，不得勾选 `feat` / `fix` 等其他类型。Issue Link 请使用 `Refs #<issue_number>`（本 issue 建议写 `Refs #1497`），切勿使用 `Closes` / `Fixes`，避免误关闭仍待交付的 runtime issue。
-> 请在 PR 元信息中统一写明：`docs + Refs #<issue_number>`（本 issue 即 `docs + Refs #1497`）。
+> 文档 / 治理类 PR 建议仅勾选 `docs`，并避免在该类 PR 使用 `Closes` / `Fixes` 触发自动关闭。
+> 如需关联 Issue，请使用 `Refs #<issue_number>`；无 Issue 时可留空并说明文档边界范围。
 
-> 若该 PR 为 docs-only（含本 issue 边界澄清），请务必在 Issue Link 仅填写 `Refs #<issue_number>` 或空，不得填写 `Closes` / `Fixes`（避免误关闭 Issue）。
-> 示例（本 Issue #1497 的边界澄清）：
-> - PR Type 仅勾选 `docs`
-> - Issue Link 使用 `Refs #1497`
+> 若该 PR 为 docs-only，请在 Issue Link 仅填写 `Refs #<issue_number>` 或空，不得填写 `Closes` / `Fixes`（避免误关闭 Issue）。
+> PR Type 建议仅勾选 `docs`
 
 ## Background And Problem
 
@@ -46,12 +44,12 @@ For English contributors: please fill in English. All fields marked (EN) accept 
 
 必须填写以下之一 / Fill in one of:
 
-- `Refs #<issue_number>`（文档/治理类 PR 推荐；边界澄清类可写 `Refs #1497`）
+- `Refs #<issue_number>`（文档/治理类 PR 推荐）
 - `Fixes #<issue_number>`（运行时行为交付且确定可关闭 Issue 时使用）
 - 无 Issue 时说明原因与验收标准 / If no issue, explain the motivation and acceptance criteria
 
-> 文档/治理类、仅做边界澄清且不含运行时交付的 PR，请使用 `docs + Refs #<issue_number>` 作为元信息（例如 `docs + Refs #1497`），并在 PR 类型中仅勾选 `docs`；避免误触发 Issue 自动关闭；不要使用 `Fixes` / `Closes`（二者都会触发 Issue 自动关闭）用于此类 PR。
-> For docs/governance-only changes that only clarify boundaries and do not include runtime delivery, use metadata as `docs + Refs #<issue_number>` (for example `docs + Refs #1497`) and select only PR type `docs`; do not use `Fixes` or `Closes` (both auto-close issues) for this PR type.
+> 文档/治理类、仅做边界澄清且不含运行时交付的 PR，请按需使用 `docs + Refs #<issue_number>`，并在 PR 类型中仅勾选 `docs`；避免误触发 Issue 自动关闭。
+> For docs/governance-only changes that only clarify boundaries and do not include runtime delivery, use `docs + Refs #<issue_number>` if needed and keep PR type as `docs` only; avoid auto-closing issues with `Fixes` / `Closes`.
 
 ## Verification Commands And Results
 
