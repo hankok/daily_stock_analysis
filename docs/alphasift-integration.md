@@ -36,7 +36,7 @@ alphasift.screen(strategy, market=market, max_output=max_results, use_llm=False)
 ## 契约与兼容验证
 
 后端 `/api/v1/alphasift/status` 与 `/api/v1/alphasift/install` 只返回非敏感字段，不会回传原始 `ALPHASIFT_INSTALL_SPEC`，并在响应中给出 `install_spec_is_default` 是否为默认可信来源。
-在自动化测试中通过 `tests/test_alphasift_api.py` 固化以下约束：
+在自动化测试中通过 `tests/test_alphasift_api.py` 固化以下约束（以便将该 commit 与 DSA 调用契约解耦验证）：
 
 - 状态接口不返回 `install_spec` 明文。
 - 安装接口返回 `installed`/`already_installed`/`install_spec_is_default`，不返回 `install_spec` 明文。
