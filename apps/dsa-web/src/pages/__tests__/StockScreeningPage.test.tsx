@@ -75,4 +75,42 @@ describe('StockScreeningPage', () => {
     await waitFor(() => expect(screenStocks).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByText('当前策略：自定义策略（custom_strategy_alpha） · A 股')).toBeInTheDocument());
   });
+
+  it('uses supported AlphaSift strategy ids and markets', async () => {
+    getAlphaSiftStatus.mockResolvedValueOnce({
+      enabled: true,
+      available: false,
+      installSpecIsDefault: true,
+    });
+    screenStocks.mockResolvedValue({
+      enabled: true,
+      candidates: [],
+      candidateCount: 0,
+    });
+
+    render(<StockScreeningPage />);
+
+    expect(await screen.findByText('选股已开启')).toBeInTheDocument();
+
+    const marketSelect = screen.getByLabelText('市场') as HTMLSelectElement;
+    expect(Array.from(marketSelect.options).map((option) => option.value)).toEqual(['cn']);
+
+    [
+      ['均衡多因子', 'balanced_alpha'],
+      ['资金热度', 'capital_heat'],
+      ['超跌反转', 'oversold_reversal'],
+      ['缩量回踩', 'shrink_pullback'],
+    ].forEach(([label, id]) => {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(label) }));
+      expect(screen.getByDisplayValue(id)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /运行选股/ }));
+    await waitFor(() => expect(screenStocks).toHaveBeenCalledTimes(1));
+    expect(screenStocks).toHaveBeenCalledWith({
+      market: 'cn',
+      strategy: 'shrink_pullback',
+      maxResults: 20,
+    });
+  });
 });

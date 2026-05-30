@@ -6,13 +6,13 @@ import { AppPage, Button, InlineAlert } from '../components/common';
 
 const STRATEGIES = [
   {
-    id: 'balanced_multi_factor',
+    id: 'balanced_alpha',
     title: '均衡多因子',
     description: '综合估值、资金、动量、稳定性的通用候选发现策略',
     tag: '框架',
   },
   {
-    id: 'theme_heat',
+    id: 'capital_heat',
     title: '资金热度',
     description: '资金活跃、量价同步但未被透支的短线候选',
     tag: '动量',
@@ -30,7 +30,7 @@ const STRATEGIES = [
     tag: '框架',
   },
   {
-    id: 'reversal',
+    id: 'oversold_reversal',
     title: '超跌反转',
     description: '跌幅可控、流动性仍在、具备修复观察价值的反转候选',
     tag: '反转',
@@ -42,7 +42,7 @@ const STRATEGIES = [
     tag: '价值',
   },
   {
-    id: 'pullback_trend',
+    id: 'shrink_pullback',
     title: '缩量回踩',
     description: '上升趋势中缩量回踩支撑，观察趋势延续的入场信号',
     tag: '趋势',
@@ -57,8 +57,6 @@ const STRATEGIES = [
 
 const MARKETS = [
   { id: 'cn', label: 'A 股' },
-  { id: 'hk', label: '港股' },
-  { id: 'us', label: '美股' },
 ];
 
 const getCandidateReason = (item: AlphaSiftCandidate) => {

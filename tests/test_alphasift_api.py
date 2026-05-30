@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from dataclasses import dataclass
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -196,6 +197,35 @@ class AlphaSiftOpportunitiesApiTestCase(unittest.TestCase):
         )
         self.assertEqual(payload["candidate_count"], 1)
         self.assertEqual(payload["candidates"][0]["code"], "600519")
+
+    def test_screen_reads_picks_from_screen_result_dataclass(self) -> None:
+        @dataclass
+        class ScreenResult:
+            picks: list
+
+        config = self._config(enabled=True)
+        fake_module = SimpleNamespace(
+            screen=MagicMock(
+                return_value=ScreenResult(
+                    picks=[
+                        {
+                            "code": "600519",
+                            "name": "Kweichow Moutai",
+                            "final_score": 91.25,
+                            "ranking_reason": "AlphaSift pick",
+                        }
+                    ]
+                )
+            )
+        )
+
+        with patch("api.v1.endpoints.alphasift._import_alphasift", return_value=fake_module):
+            payload = self._screen(config, market="cn", strategy="balanced_alpha", max_results=5)
+
+        self.assertEqual(payload["candidate_count"], 1)
+        self.assertEqual(payload["candidates"][0]["code"], "600519")
+        self.assertEqual(payload["candidates"][0]["score"], 91.25)
+        self.assertEqual(payload["candidates"][0]["reason"], "AlphaSift pick")
 
 
 if __name__ == "__main__":

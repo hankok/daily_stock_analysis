@@ -178,7 +178,7 @@ def _normalize_candidates(raw: Any) -> List[Dict[str, Any]]:
     data = _to_plain(raw)
     items = data
     if isinstance(data, dict):
-        for key in ("candidates", "items", "results", "stocks"):
+        for key in ("picks", "candidates", "items", "results", "stocks"):
             if isinstance(data.get(key), list):
                 items = data[key]
                 break
@@ -191,11 +191,15 @@ def _normalize_candidate(raw: Any, rank: int) -> Dict[str, Any]:
     item = _to_plain(raw)
     if not isinstance(item, dict):
         item = {"code": str(item)}
+    score = item.get("score")
+    if score is None:
+        score = item.get("final_score")
+
     return {
         "rank": item.get("rank") or rank,
         "code": item.get("code") or item.get("symbol") or item.get("stock_code") or "",
         "name": item.get("name") or item.get("stock_name") or "",
-        "score": item.get("score"),
+        "score": score,
         "reason": item.get("reason") or item.get("ranking_reason") or item.get("summary") or "",
         "raw": item,
     }
