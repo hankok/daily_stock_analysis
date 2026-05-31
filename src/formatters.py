@@ -717,7 +717,7 @@ def _format_feishu_markdown_unprotected(content: str) -> str:
         # 转换引用块
         elif line.startswith('> '):
             quote = line[2:].strip()
-            line = f"引用：{quote}" if quote else ""
+            line = quote
         # 转换分隔线
         elif line.strip() == '---':
             line = '────────'
@@ -740,7 +740,7 @@ def format_feishu_markdown(content: str) -> str:
 
     转换规则：
     - 飞书不支持 Markdown 标题（# / ## / ###），用加粗代替
-    - 引用块使用纯文本前缀替代
+    - 引用块去掉 > 前缀，避免群消息里出现生硬的“引用”标签
     - 分隔线统一为细线
     - 表格转换为条目列表
     - 代码块中的 Markdown 示例保持原样
@@ -756,7 +756,7 @@ def format_feishu_markdown(content: str) -> str:
         >>> formatted = format_feishu_markdown(markdown)
         >>> print(formatted)
         **标题**
-        引用：引用
+        引用
         • 列1：值1 | 列2：值2
     """
 

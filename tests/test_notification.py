@@ -735,12 +735,14 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
 
         self.assertIn("结论速览", out)
         self.assertIn("数据透视", out)
-        self.assertIn("现价 1326.0", out)
+        self.assertIn("现价：1326.0", out)
         self.assertIn("关键点位", out)
         self.assertIn("理想买入：1303.00", out)
         self.assertIn("仓位与风控", out)
         self.assertIn("关联板块", out)
         self.assertNotIn("|---------|", out)
+        self.assertNotIn("｜", out)
+        self.assertNotIn(" | ", out)
         self.assertNotIn("价格指标", out)
 
     @mock.patch("src.notification.get_config")

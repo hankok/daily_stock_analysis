@@ -2422,14 +2422,29 @@ class StockAnalysisPipeline:
         try:
             logger.info("生成决策仪表盘日报...")
             report = self._generate_aggregate_report(results, report_type)
-            chat_report = report
-            if report_type != ReportType.BRIEF:
-                chat_generator = getattr(self.notifier, "generate_chat_report", None)
+            chat_generator = getattr(self.notifier, "generate_chat_report", None)
+            chat_report_cache: Dict[str, str] = {}
+
+            def _chat_report_for(channel: NotificationChannel) -> str:
+                if report_type == ReportType.BRIEF:
+                    return self.notifier.generate_brief_report(results)
+                platform = channel.value
+                if platform in chat_report_cache:
+                    return chat_report_cache[platform]
+                content = report
                 if callable(chat_generator):
                     try:
-                        chat_report = chat_generator(results)
+                        content = chat_generator(results, platform=platform)
+                    except TypeError:
+                        content = chat_generator(results)
                     except Exception as e:
-                        logger.warning("生成 IM 版报告失败，将回退完整 Markdown 报告: %s", e)
+                        logger.warning(
+                            "生成 %s IM 版报告失败，将回退完整 Markdown 报告: %s",
+                            platform,
+                            e,
+                        )
+                chat_report_cache[platform] = content
+                return content
             
             # 跳过推送（单股推送模式 / 合并模式：报告已由 _save_local_report 保存）
             if skip_push:
@@ -2572,6 +2587,7 @@ class StockAnalysisPipeline:
 
                 image_bytes = None
                 chat_image_bytes = None
+                chat_image_bytes_by_channel: Dict[NotificationChannel, Optional[bytes]] = {}
                 chat_image_channels = {
                     NotificationChannel.TELEGRAM,
                     NotificationChannel.SLACK,
@@ -2593,28 +2609,29 @@ class StockAnalysisPipeline:
                             _get_md2img_hint(),
                         )
                 if im_channels_needing_image:
-                    chat_image_bytes = markdown_to_image(
-                        chat_report, max_chars=self.notifier._markdown_to_image_max_chars
-                    )
-                    if chat_image_bytes:
-                        logger.info(
-                            "IM 版 Markdown 已转换为图片，将向 %s 发送图片",
-                            [ch.value for ch in im_channels_needing_image],
+                    for image_channel in im_channels_needing_image:
+                        chat_image_bytes = markdown_to_image(
+                            _chat_report_for(image_channel),
+                            max_chars=self.notifier._markdown_to_image_max_chars,
                         )
-                    else:
-                        logger.warning(
-                            "IM 版 Markdown 转图片失败，将回退为文本发送。请检查 MARKDOWN_TO_IMAGE_CHANNELS 配置并安装 %s",
-                            _get_md2img_hint(),
-                        )
+                        chat_image_bytes_by_channel[image_channel] = chat_image_bytes
+                        if chat_image_bytes:
+                            logger.info(
+                                "%s IM 版 Markdown 已转换为图片",
+                                image_channel.value,
+                            )
+                        else:
+                            logger.warning(
+                                "%s IM 版 Markdown 转图片失败，将回退为文本发送。请检查 MARKDOWN_TO_IMAGE_CHANNELS 配置并安装 %s",
+                                image_channel.value,
+                                _get_md2img_hint(),
+                            )
 
                 # 企业微信：默认发送完整报告，交给 sender 做结构感知分片。
                 wechat_success = False
                 if NotificationChannel.WECHAT in channels:
                     def _send_wechat_report() -> bool:
-                        if report_type == ReportType.BRIEF:
-                            wechat_content = self.notifier.generate_brief_report(results)
-                        else:
-                            wechat_content = chat_report
+                        wechat_content = _chat_report_for(NotificationChannel.WECHAT)
                         logger.info(f"企业微信报告长度: {len(wechat_content)} 字符")
                         logger.debug(f"企业微信推送内容:\n{wechat_content}")
                         wechat_image_bytes = None
@@ -2654,7 +2671,7 @@ class StockAnalysisPipeline:
                     if channel == NotificationChannel.FEISHU:
                         channel_success, channel_error = _send_channel_safely(
                             channel.value,
-                            lambda: self.notifier.send_to_feishu(chat_report),
+                            lambda: self.notifier.send_to_feishu(_chat_report_for(NotificationChannel.FEISHU)),
                         )
                         non_wechat_success = channel_success or non_wechat_success
                         _record_channel_result(
@@ -2665,14 +2682,16 @@ class StockAnalysisPipeline:
                     elif channel == NotificationChannel.TELEGRAM:
                         def _send_telegram_report() -> bool:
                             telegram_image_bytes = (
-                                chat_image_bytes if channel in chat_image_channels else image_bytes
+                                chat_image_bytes_by_channel.get(channel)
+                                if channel in chat_image_channels
+                                else image_bytes
                             )
                             use_image = self.notifier._should_use_image_for_channel(
                                 channel, telegram_image_bytes
                             )
                             if use_image:
                                 return self.notifier._send_telegram_photo(telegram_image_bytes)
-                            return self.notifier.send_to_telegram(chat_report)
+                            return self.notifier.send_to_telegram(_chat_report_for(NotificationChannel.TELEGRAM))
 
                         channel_success, channel_error = _send_channel_safely(
                             channel.value,
@@ -2860,16 +2879,19 @@ class StockAnalysisPipeline:
                     elif channel == NotificationChannel.SLACK:
                         def _send_slack_report() -> bool:
                             slack_image_bytes = (
-                                chat_image_bytes if channel in chat_image_channels else image_bytes
+                                chat_image_bytes_by_channel.get(channel)
+                                if channel in chat_image_channels
+                                else image_bytes
                             )
                             use_image = self.notifier._should_use_image_for_channel(
                                 channel, slack_image_bytes
                             )
+                            slack_content = _chat_report_for(NotificationChannel.SLACK)
                             if use_image and self.notifier._slack_bot_token and self.notifier._slack_channel_id:
                                 return self.notifier._send_slack_image(
-                                    slack_image_bytes, fallback_content=chat_report
+                                    slack_image_bytes, fallback_content=slack_content
                                 )
-                            return self.notifier.send_to_slack(chat_report)
+                            return self.notifier.send_to_slack(slack_content)
 
                         channel_success, channel_error = _send_channel_safely(
                             channel.value,

@@ -318,7 +318,8 @@ class TestNotificationMarkdownFormatters(unittest.TestCase):
         result = format_feishu_markdown(text)
 
         self.assertIn("**日报**", result)
-        self.assertIn("引用：风险提示", result)
+        self.assertIn("风险提示", result)
+        self.assertNotIn("引用：", result)
         self.assertIn("• 600519：强势", result)
         self.assertIn("• 关注量能", result)
 

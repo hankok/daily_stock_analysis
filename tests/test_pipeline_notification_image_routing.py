@@ -258,6 +258,9 @@ class TestPipelineReportRouteFiltering(unittest.TestCase):
             ],
         )
         pipeline.notifier.send_to_telegram.assert_called_once_with("chat-report")
+        pipeline.notifier.generate_chat_report.assert_called_once_with(
+            results, platform="telegram"
+        )
         pipeline.notifier.send_to_wechat.assert_not_called()
         pipeline.notifier.send_to_email.assert_not_called()
         pipeline.notifier.evaluate_noise_control.assert_called_once()

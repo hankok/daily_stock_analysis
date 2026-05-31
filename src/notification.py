@@ -1326,6 +1326,7 @@ class NotificationService(
         *,
         limit: int = 3,
         max_len: int = 90,
+        bullet: str = "-",
     ) -> None:
         if isinstance(items, str):
             normalized = [items]
@@ -1339,7 +1340,7 @@ class NotificationService(
             return
         lines.append(f"**{title}**")
         for item in values[:limit]:
-            lines.append(f"- {item}")
+            lines.append(f"{bullet} {item}")
         lines.append("")
 
     @staticmethod
@@ -1348,8 +1349,8 @@ class NotificationService(
         for label, value in pairs:
             text = str(value).strip() if value is not None else ""
             if text and text.upper() != "N/A":
-                parts.append(f"{label} {text}")
-        return " ｜ ".join(parts)
+                parts.append(f"{label}：{text}")
+        return "，".join(parts)
 
     def _chat_related_boards(self, result: AnalysisResult, *, limit: int = 5) -> str:
         boards = self._get_fundamental_blocks(result).get("belong_boards") or []
@@ -1382,13 +1383,15 @@ class NotificationService(
         buy_count = sum(1 for r in results if getattr(r, 'decision_type', '') == 'buy')
         sell_count = sum(1 for r in results if getattr(r, 'decision_type', '') == 'sell')
         hold_count = sum(1 for r in results if getattr(r, 'decision_type', '') in ('hold', ''))
-        separator = "━━━━━━━━━━━━"
+        normalized_platform = (platform or "generic").lower()
+        bullet = "•" if normalized_platform in {"feishu", "slack"} else "-"
+        separator = "────────"
         score_suffix = "分" if report_language == "zh" else " pts"
 
         lines = [
-            f"## 🎯 {report_date} {labels['dashboard_title']}",
-            f"> {len(results)} {labels['stock_unit']} ｜ 🟢{labels['buy_label']} {buy_count} ｜ "
-            f"🟡{labels['watch_label']} {hold_count} ｜ 🔴{labels['sell_label']} {sell_count}",
+            f"**🎯 {report_date} {labels['dashboard_title']}**",
+            f"{len(results)} {labels['stock_unit']}：{labels['buy_label']} {buy_count}，"
+            f"{labels['watch_label']} {hold_count}，{labels['sell_label']} {sell_count}",
             "",
             "**📌 结论速览**" if report_language == "zh" else "**📌 Summary**",
         ]
@@ -1396,10 +1399,10 @@ class NotificationService(
             _, signal_emoji, _ = self._get_signal_level(result)
             stock_name = self._get_display_name(result, report_language)
             lines.append(
-                f"- {signal_emoji} **{stock_name}({result.code})**："
-                f"{localize_operation_advice(result.operation_advice, report_language)} ｜ "
-                f"{result.sentiment_score}{score_suffix} ｜ "
-                f"{localize_trend_prediction(result.trend_prediction, report_language)}"
+                f"{bullet} {signal_emoji} **{stock_name}({result.code})**："
+                f"建议 {localize_operation_advice(result.operation_advice, report_language)}，"
+                f"评分 {result.sentiment_score}{score_suffix}，"
+                f"趋势 {localize_trend_prediction(result.trend_prediction, report_language)}"
             )
         lines.append("")
 
@@ -1417,12 +1420,12 @@ class NotificationService(
             confidence = self._chat_text(localize_confidence_level(result.confidence_level, report_language))
             lines.extend([
                 separator,
-                f"### {signal_emoji} {stock_name} ({result.code})",
+                f"**{signal_emoji} {stock_name} ({result.code})**",
                 (
-                    f"**{localize_operation_advice(result.operation_advice, report_language)}** ｜ "
-                    f"{result.sentiment_score}{score_suffix} ｜ "
-                    f"{localize_trend_prediction(result.trend_prediction, report_language)}"
-                    + (f" ｜ {confidence}" if confidence else "")
+                    f"建议：**{localize_operation_advice(result.operation_advice, report_language)}**"
+                    f"；评分：{result.sentiment_score}{score_suffix}"
+                    f"；趋势：{localize_trend_prediction(result.trend_prediction, report_language)}"
+                    + (f"；置信：{confidence}" if confidence else "")
                 ),
             ])
             if one_sentence:
@@ -1456,15 +1459,15 @@ class NotificationService(
             if data_line or trend_line:
                 lines.append("**📊 数据透视**")
                 if data_line:
-                    lines.append(data_line)
+                    lines.append(f"{bullet} {data_line}")
                 if trend_line:
-                    lines.append(trend_line)
+                    lines.append(f"{bullet} {trend_line}")
                 volume_meaning = self._chat_text(vol_data.get('volume_meaning'), 100)
                 if volume_meaning:
-                    lines.append(f"量能解读：{volume_meaning}")
+                    lines.append(f"{bullet} 量能解读：{volume_meaning}")
                 if chip_data:
                     if is_chip_structure_unavailable(chip_data):
-                        lines.append(f"筹码：{get_chip_unavailable_reason(chip_data, report_language)}")
+                        lines.append(f"{bullet} 筹码：{get_chip_unavailable_reason(chip_data, report_language)}")
                     else:
                         chip_line = self._chat_metric_line([
                             ("获利盘", chip_data.get('profit_ratio')),
@@ -1472,11 +1475,11 @@ class NotificationService(
                             ("集中度", chip_data.get('concentration')),
                         ])
                         if chip_line:
-                            lines.append(f"筹码：{chip_line}")
+                            lines.append(f"{bullet} 筹码：{chip_line}")
                 else:
                     chip_unavailable_reason = get_chip_unavailable_reason(data_persp, report_language)
                     if chip_unavailable_reason:
-                        lines.append(f"筹码：{chip_unavailable_reason}")
+                        lines.append(f"{bullet} 筹码：{chip_unavailable_reason}")
                 lines.append("")
 
             pos_advice = core.get('position_advice', {}) if core else {}
@@ -1488,9 +1491,9 @@ class NotificationService(
                 )
                 has_position = self._chat_text(pos_advice.get('has_position'), 110)
                 if no_position:
-                    lines.append(f"- 空仓：{no_position}")
+                    lines.append(f"{bullet} 空仓：{no_position}")
                 if has_position:
-                    lines.append(f"- 持仓：{has_position}")
+                    lines.append(f"{bullet} 持仓：{has_position}")
                 lines.append("")
 
             sniper = battle.get('sniper_points', {}) if battle else {}
@@ -1504,7 +1507,7 @@ class NotificationService(
             if point_lines:
                 lines.append("**🎯 关键点位**")
                 for item in point_lines:
-                    lines.append(f"- {item}")
+                    lines.append(f"{bullet} {item}")
                 lines.append("")
 
             position = battle.get('position_strategy', {}) if battle else {}
@@ -1514,15 +1517,15 @@ class NotificationService(
             if position_line or entry_plan or risk_control:
                 lines.append("**💰 仓位与风控**")
                 if position_line:
-                    lines.append(f"- 仓位：{position_line}")
+                    lines.append(f"{bullet} 仓位：{position_line}")
                 if entry_plan:
-                    lines.append(f"- 建仓：{entry_plan}")
+                    lines.append(f"{bullet} 建仓：{entry_plan}")
                 if risk_control:
-                    lines.append(f"- 风控：{risk_control}")
+                    lines.append(f"{bullet} 风控：{risk_control}")
                 lines.append("")
 
-            self._append_chat_bullets(lines, "🚨 风险", intel.get('risk_alerts', []), limit=3)
-            self._append_chat_bullets(lines, "✨ 机会", intel.get('positive_catalysts', []), limit=3)
+            self._append_chat_bullets(lines, "🚨 风险", intel.get('risk_alerts', []), limit=3, bullet=bullet)
+            self._append_chat_bullets(lines, "✨ 机会", intel.get('positive_catalysts', []), limit=3, bullet=bullet)
 
             sentiment = self._chat_text(intel.get('sentiment_summary'), 100)
             earnings = self._chat_text(intel.get('earnings_outlook'), 100)
@@ -1530,15 +1533,15 @@ class NotificationService(
             if sentiment or earnings or latest_news:
                 lines.append("**📰 消息与基本面**")
                 if sentiment:
-                    lines.append(f"- 情绪：{sentiment}")
+                    lines.append(f"{bullet} 情绪：{sentiment}")
                 if earnings:
-                    lines.append(f"- 业绩：{earnings}")
+                    lines.append(f"{bullet} 业绩：{earnings}")
                 if latest_news:
-                    lines.append(f"- 最新：{latest_news}")
+                    lines.append(f"{bullet} 最新：{latest_news}")
                 lines.append("")
 
             checklist = battle.get('action_checklist', []) if battle else []
-            self._append_chat_bullets(lines, "✅ 检查清单", checklist, limit=6)
+            self._append_chat_bullets(lines, "✅ 检查清单", checklist, limit=6, bullet=bullet)
 
             boards = self._chat_related_boards(result)
             if boards:
