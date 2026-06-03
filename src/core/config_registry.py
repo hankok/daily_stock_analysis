@@ -482,7 +482,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "ALPHASIFT_ENABLED": {
         "title": "AlphaSift Screening",
-        "description": "Enable the optional AlphaSift stock screening tab. Disabled by default.",
+        "description": "Enable the built-in AlphaSift stock screening tab. Disabled by default.",
         "category": "data_source",
         "data_type": "boolean",
         "ui_control": "switch",
@@ -507,7 +507,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "ALPHASIFT_INSTALL_SPEC": {
         "title": "AlphaSift Install Spec",
-        "description": "Pinned AlphaSift pip install spec used by source deployments and desktop packaging.",
+        "description": "Pinned AlphaSift pip source used for explicit repair installs and source verification.",
         "category": "data_source",
         "data_type": "string",
         "ui_control": "password",

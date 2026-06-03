@@ -44,7 +44,7 @@ describe('StockScreeningPage', () => {
     getStrategies.mockResolvedValue(mockStrategiesResponse);
   });
 
-  it('re-syncs enabled state when AlphaSift install fails after config is enabled', async () => {
+  it('re-syncs enabled state when AlphaSift availability check fails after config is enabled', async () => {
     getAlphaSiftStatus
       .mockResolvedValueOnce({
         enabled: false,
@@ -56,7 +56,7 @@ describe('StockScreeningPage', () => {
         available: false,
         installSpecIsDefault: true,
       });
-    enableAlphaSift.mockRejectedValueOnce(new Error('安装 AlphaSift 失败'));
+    enableAlphaSift.mockRejectedValueOnce(new Error('AlphaSift 适配层不可用。请执行 pip install -r requirements.txt'));
 
     render(<StockScreeningPage />);
 
@@ -68,7 +68,7 @@ describe('StockScreeningPage', () => {
     await waitFor(() => expect(getAlphaSiftStatus).toHaveBeenCalledTimes(2));
     expect(screen.getByText('选股已开启')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /运行选股/ })).not.toBeDisabled();
-    expect(screen.getByText('安装 AlphaSift 失败')).toBeInTheDocument();
+    expect(screen.getByText('AlphaSift 适配层不可用。请执行 pip install -r requirements.txt')).toBeInTheDocument();
   });
 
   it('shows input strategy when strategy is not in preset list', async () => {
@@ -266,5 +266,52 @@ describe('StockScreeningPage', () => {
     expect(await screen.findByText('AlphaSift 提示')).toBeInTheDocument();
     expect(screen.getAllByText(/tushare trade_cal returned no open trading days/)).toHaveLength(1);
     expect(screen.getByText(/数据源降级：tushare/)).toBeInTheDocument();
+  });
+
+  it('shows DSA enrichment summary, news, and enrichment metadata', async () => {
+    getAlphaSiftStatus.mockResolvedValueOnce({
+      enabled: true,
+      available: true,
+      installSpecIsDefault: true,
+    });
+    screenStocks.mockResolvedValueOnce({
+      enabled: true,
+      candidates: [
+        {
+          rank: 1,
+          code: '600519',
+          name: '贵州茅台',
+          score: 91.2,
+          reason: 'AlphaSift pick',
+          dsaAnalysisSummary: 'DSA行情：现价 1688，涨跌幅 1.2%；DSA新闻：贵州茅台最新公告',
+          dsaNews: [{ title: '贵州茅台最新公告', source: '测试源' }],
+          dsaContext: {
+            enriched: true,
+            warnings: ['stock_news_unavailable'],
+          },
+          raw: {},
+        },
+      ],
+      candidateCount: 1,
+      dsaEnrichment: {
+        enabled: true,
+        requestedCount: 1,
+        enrichedCount: 1,
+      },
+    });
+
+    render(<StockScreeningPage />);
+
+    expect(await screen.findByText('选股已开启')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /运行选股/ }));
+
+    expect(await screen.findByText('DSA增强：1 / 1')).toBeInTheDocument();
+
+    expect(screen.getByText('DSA 增强摘要')).toBeInTheDocument();
+    expect(screen.getByText(/DSA行情：现价 1688/)).toBeInTheDocument();
+    expect(screen.getByText('DSA 新闻')).toBeInTheDocument();
+    expect(screen.getByText('贵州茅台最新公告')).toBeInTheDocument();
+    expect(screen.getByText('DSA 增强提示')).toBeInTheDocument();
+    expect(screen.getByText('stock_news_unavailable')).toBeInTheDocument();
   });
 });

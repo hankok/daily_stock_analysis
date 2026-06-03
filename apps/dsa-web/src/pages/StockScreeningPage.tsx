@@ -253,7 +253,7 @@ const StockScreeningPage: React.FC = () => {
           </span>
           <div>
             <h1 className="text-2xl font-bold tracking-normal text-foreground">AlphaSift 选股</h1>
-            <p className="mt-1 text-sm text-secondary-text">开启后通过 AlphaSift 适配层生成候选股票</p>
+            <p className="mt-1 text-sm text-secondary-text">开启后通过内置 AlphaSift 适配层生成候选股票，并补充 DSA 数据与新闻</p>
           </div>
         </div>
 
@@ -267,7 +267,7 @@ const StockScreeningPage: React.FC = () => {
         <InlineAlert
           variant="info"
           title="AlphaSift 未开启"
-          message="点击后写入 ALPHASIFT_ENABLED=true；若适配层缺失，会使用受信任来源尝试自动安装。"
+          message="点击后写入 ALPHASIFT_ENABLED=true；AlphaSift 已随后端依赖安装，若适配层缺失请先更新依赖或重建后端。"
           action={
             <Button size="sm" isLoading={enabling} loadingText="开启中..." onClick={() => void handleEnable()}>
               开启 AlphaSift
@@ -278,8 +278,8 @@ const StockScreeningPage: React.FC = () => {
 
       <InlineAlert
         variant="warning"
-        title="风险提示"
-        message="AlphaSift 选股结果仅用于研究和辅助判断，不构成投资建议；市场有风险，交易决策和损益由使用者自行承担。"
+        title="实验功能与风险提示"
+        message="AlphaSift 选股仍处于实验性质，结果仅用于研究和辅助判断，不构成投资建议；市场有风险，交易决策和损益由使用者自行承担。"
       />
 
       {error ? <InlineAlert variant="danger" title="调用失败" message={error} /> : null}
@@ -288,7 +288,7 @@ const StockScreeningPage: React.FC = () => {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-foreground">选择策略</h2>
-            <p className="mt-1 text-xs text-secondary-text">策略来自 AlphaSift，DSA 只负责调用稳定适配层。</p>
+            <p className="mt-1 text-xs text-secondary-text">策略来自 AlphaSift；DSA 会对候选补充行情、基本面和新闻上下文。</p>
           </div>
           <span className="rounded-full border border-cyan/30 bg-cyan/10 px-3 py-1 text-xs font-semibold text-cyan">
             {selectedStrategyTag}
@@ -414,6 +414,9 @@ const StockScreeningPage: React.FC = () => {
               LLM：{screenMeta?.llmRanked ? '已重排' : screenMeta ? '未重排' : '-'}
               {screenMeta?.llmCoverage != null ? ` · 覆盖 ${formatPercent(screenMeta.llmCoverage)}` : ''}
             </span>
+            <span>
+              DSA增强：{screenMeta?.dsaEnrichment?.enrichedCount ?? '-'} / {screenMeta?.dsaEnrichment?.requestedCount ?? '-'}
+            </span>
           </div>
         </div>
       </section>
@@ -431,7 +434,7 @@ const StockScreeningPage: React.FC = () => {
           <div>
             <h2 className="text-base font-semibold text-foreground">选股结果</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">
-              AlphaSift 返回的候选会在这里展示，展开后可查看因子、风险、后置分析摘要和原始字段。
+              AlphaSift 返回候选后，DSA 会对前几名补充行情、基本面、新闻和辅助摘要。
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-2 text-xs text-secondary-text">
@@ -471,6 +474,8 @@ const StockScreeningPage: React.FC = () => {
                     llmDegraded && !llmInsightAvailable
                       ? '本次 LLM 重排失败或未返回判断，当前展示的是本地因子评分结果。'
                       : '暂无 LLM 判断';
+                  const dsaWarnings = item.dsaContext?.warnings || [];
+                  const dsaNews = item.dsaNews || [];
                   return (
                     <Fragment key={`${item.rank}-${item.code}`}>
                       <tr className="border-t border-border align-top transition-colors hover:bg-hover/50">
@@ -510,6 +515,12 @@ const StockScreeningPage: React.FC = () => {
                                   <p className="text-xs font-semibold text-secondary-text">操作信号</p>
                                   <p className="mt-1 text-sm text-foreground">{getSignal(item)}</p>
                                 </div>
+                                {item.dsaAnalysisSummary ? (
+                                  <div>
+                                    <p className="text-xs font-semibold text-secondary-text">DSA 增强摘要</p>
+                                    <p className="mt-1 text-sm leading-6 text-foreground">{item.dsaAnalysisSummary}</p>
+                                  </div>
+                                ) : null}
                                 <div>
                                   <p className="text-xs font-semibold text-secondary-text">LLM 判断</p>
                                   <p className="mt-1 text-sm leading-6 text-foreground">
@@ -564,6 +575,26 @@ const StockScreeningPage: React.FC = () => {
                                     {item.llmCatalysts?.length ? item.llmCatalysts.join('，') : llmDegraded ? '未返回（LLM 已降级）' : '无'}
                                   </p>
                                 </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-secondary-text">DSA 新闻</p>
+                                  {dsaNews.length > 0 ? (
+                                    <ul className="mt-1 space-y-1 text-sm text-foreground">
+                                      {dsaNews.slice(0, 3).map((newsItem, newsIndex) => (
+                                        <li key={`${item.code}-dsa-news-${newsIndex}`}>
+                                          {newsItem.title || newsItem.snippet || '-'}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="mt-1 text-sm text-secondary-text">无</p>
+                                  )}
+                                </div>
+                                {dsaWarnings.length > 0 ? (
+                                  <div>
+                                    <p className="text-xs font-semibold text-secondary-text">DSA 增强提示</p>
+                                    <p className="mt-1 text-sm text-secondary-text">{dsaWarnings.join('，')}</p>
+                                  </div>
+                                ) : null}
                               </div>
                             </div>
                           </td>
