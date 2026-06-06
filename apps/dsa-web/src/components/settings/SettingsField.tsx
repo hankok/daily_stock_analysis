@@ -208,9 +208,7 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
   const schema = item.schema;
   const isMultiValue = isMultiValueField(item);
   const helpContent = getSettingsHelpContent(schema?.helpKey, schema?.description, language);
-  const title = language === 'en'
-    ? helpContent?.title ?? schema?.title ?? item.key
-    : getFieldTitleZh(item.key, item.key);
+  const title = schema?.title ?? getFieldTitleZh(item.key, item.key);
   const description = language === 'en'
     ? helpContent?.summary ?? schema?.description ?? ''
     : getFieldDescriptionZh(item.key, schema?.description);
