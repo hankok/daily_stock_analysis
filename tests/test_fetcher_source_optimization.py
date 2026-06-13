@@ -298,6 +298,39 @@ class TestFetcherSourceOptimization(unittest.TestCase):
         finally:
             DataFetcherManager.reset_daily_source_health()
 
+    @patch("src.config.get_config")
+    def test_daily_source_health_does_not_skip_source_after_empty_results(self, mock_get_config):
+        mock_get_config.return_value = SimpleNamespace()
+        DataFetcherManager.reset_daily_source_health()
+        try:
+            primary = MagicMock()
+            primary.name = "EfinanceFetcher"
+            primary.priority = 0
+            primary.get_daily_data.return_value = pd.DataFrame()
+
+            backup = MagicMock()
+            backup.name = "TencentFetcher"
+            backup.priority = 1
+            backup.get_daily_data.return_value = _make_daily_df()
+
+            manager = DataFetcherManager(fetchers=[primary, backup])
+
+            for _ in range(3):
+                df, source = manager.get_daily_data("000001", start_date="2026-05-01", end_date="2026-05-08")
+                self.assertFalse(df.empty)
+                self.assertEqual(source, "TencentFetcher")
+
+            primary.get_daily_data.reset_mock()
+            primary.get_daily_data.return_value = _make_daily_df()
+
+            df, source = manager.get_daily_data("000001", start_date="2026-05-01", end_date="2026-05-08")
+
+            self.assertFalse(df.empty)
+            self.assertEqual(source, "EfinanceFetcher")
+            primary.get_daily_data.assert_called_once()
+        finally:
+            DataFetcherManager.reset_daily_source_health()
+
 
 if __name__ == "__main__":
     unittest.main()
