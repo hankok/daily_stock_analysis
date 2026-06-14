@@ -270,12 +270,19 @@ const formatScreenTaskFailure = (value: string | null | undefined) => {
   return `选股任务失败：${summarizeAlphaSiftDiagnostic(text)}`;
 };
 
+const ALPHASIFT_HOTSPOT_NO_CACHE_HINT = 'No cached AlphaSift hotspot snapshot. Click refresh to fetch live hotspots.';
+const ALPHASIFT_HOTSPOT_UNAVAILABLE_CODE = 'eastmoney_hotspot_unavailable';
+
 const formatHotspotEmptyMessage = (result: AlphaSiftHotspotsResponse) => {
   const message = String(result.message || '').trim();
-  if (message) {
+  const sourceErrors = result.sourceErrors || [];
+  if (message && sourceErrors.includes(ALPHASIFT_HOTSPOT_UNAVAILABLE_CODE)) {
     return message;
   }
-  const sourceError = result.sourceErrors?.[0];
+  if (message === ALPHASIFT_HOTSPOT_NO_CACHE_HINT) {
+    return '暂无缓存热点题材，展开后可点击刷新拉取实时数据。';
+  }
+  const sourceError = sourceErrors[0];
   if (sourceError) {
     return `热点题材暂未返回数据：${summarizeAlphaSiftDiagnostic(sourceError)}`;
   }
