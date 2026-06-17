@@ -210,6 +210,57 @@ class NewsIntel(Base):
         return f"<NewsIntel(code={self.code}, title={self.title[:20]}...)>"
 
 
+class IntelligenceSource(Base):
+    """可配置资讯源。"""
+
+    __tablename__ = 'intelligence_sources'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True, index=True)
+    source_type = Column(String(32), nullable=False, default='rss', index=True)
+    url = Column(String(1000), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True, index=True)
+    scope_type = Column(String(32), nullable=False, default='market', index=True)
+    scope_value = Column(String(64), index=True)
+    market = Column(String(32), nullable=False, default='cn', index=True)
+    description = Column(Text)
+    last_status = Column(String(32))
+    last_error = Column(Text)
+    last_fetched_at = Column(DateTime, index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+
+    __table_args__ = (
+        Index('ix_intel_source_scope', 'scope_type', 'scope_value', 'market'),
+    )
+
+
+class IntelligenceItem(Base):
+    """沉淀后的资讯 / 情报条目。"""
+
+    __tablename__ = 'intelligence_items'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_id = Column(Integer, ForeignKey('intelligence_sources.id', ondelete='SET NULL'), nullable=True, index=True)
+    source_name = Column(String(100), index=True)
+    source_type = Column(String(32), nullable=False, default='rss', index=True)
+    title = Column(String(300), nullable=False)
+    summary = Column(Text)
+    url = Column(String(1000), nullable=False, unique=True)
+    source = Column(String(100))
+    published_at = Column(DateTime, index=True)
+    fetched_at = Column(DateTime, default=datetime.now, index=True)
+    scope_type = Column(String(32), nullable=False, default='market', index=True)
+    scope_value = Column(String(64), index=True)
+    market = Column(String(32), nullable=False, default='cn', index=True)
+    raw_payload = Column(Text)
+
+    __table_args__ = (
+        Index('ix_intel_item_scope_time', 'scope_type', 'scope_value', 'market', 'published_at'),
+        Index('ix_intel_item_fetch_time', 'fetched_at'),
+    )
+
+
 class FundamentalSnapshot(Base):
     """
     基本面上下文快照（P0 write-only）。
