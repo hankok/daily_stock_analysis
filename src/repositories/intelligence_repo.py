@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from sqlalchemy import and_, delete, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
-from src.storage import DatabaseManager, IntelligenceItem, IntelligenceSource
+from src.storage import DatabaseManager, IntelligenceItem, IntelligenceSource, INTELLIGENCE_ITEM_NULL_SCOPE_VALUE
 
 
 class IntelligenceRepository:
@@ -96,36 +96,35 @@ class IntelligenceRepository:
                 title = (fields.get("title") or "").strip()
                 if not url or not title:
                     continue
-                scope_value = fields.get("scope_value")
+                item_fields = dict(fields)
+                scope_value = self._normalize_scope_value(item_fields.get("scope_value"))
+                item_fields["scope_value"] = scope_value
                 source_id = fields.get("source_id")
                 conditions = [
                     IntelligenceItem.url == url,
-                    IntelligenceItem.source_type == (fields.get("source_type") or "rss"),
-                    IntelligenceItem.scope_type == (fields.get("scope_type") or "market"),
-                    IntelligenceItem.market == (fields.get("market") or "cn"),
+                    IntelligenceItem.source_type == (item_fields.get("source_type") or "rss"),
+                    IntelligenceItem.scope_type == (item_fields.get("scope_type") or "market"),
+                    IntelligenceItem.market == (item_fields.get("market") or "cn"),
                 ]
                 if source_id is None:
                     conditions.append(IntelligenceItem.source_id.is_(None))
-                    conditions.append(IntelligenceItem.source_name == fields.get("source_name"))
+                    conditions.append(IntelligenceItem.source_name == item_fields.get("source_name"))
                 else:
                     conditions.append(IntelligenceItem.source_id == source_id)
-                if scope_value is None:
-                    conditions.append(IntelligenceItem.scope_value.is_(None))
-                else:
-                    conditions.append(IntelligenceItem.scope_value == scope_value)
+                conditions.append(IntelligenceItem.scope_value == scope_value)
                 existing = session.execute(
                     select(IntelligenceItem).where(and_(*conditions)).limit(1)
                 ).scalar_one_or_none()
                 if existing is not None:
-                    existing.summary = fields.get("summary") or existing.summary
-                    existing.source = fields.get("source") or existing.source
-                    existing.published_at = fields.get("published_at") or existing.published_at
-                    existing.fetched_at = fields.get("fetched_at") or datetime.now()
-                    existing.raw_payload = fields.get("raw_payload") or existing.raw_payload
+                    existing.summary = item_fields.get("summary") or existing.summary
+                    existing.source = item_fields.get("source") or existing.source
+                    existing.published_at = item_fields.get("published_at") or existing.published_at
+                    existing.fetched_at = item_fields.get("fetched_at") or datetime.now()
+                    existing.raw_payload = item_fields.get("raw_payload") or existing.raw_payload
                     continue
                 try:
                     with session.begin_nested():
-                        session.add(IntelligenceItem(**fields))
+                        session.add(IntelligenceItem(**item_fields))
                         session.flush()
                     saved += 1
                 except IntegrityError:
@@ -148,7 +147,7 @@ class IntelligenceRepository:
         if scope_type:
             conditions.append(IntelligenceItem.scope_type == scope_type)
         if scope_value:
-            conditions.append(IntelligenceItem.scope_value == scope_value)
+            conditions.append(IntelligenceItem.scope_value == self._normalize_scope_value(scope_value))
         if market:
             conditions.append(IntelligenceItem.market == market)
         if query:
@@ -171,6 +170,11 @@ class IntelligenceRepository:
                 .limit(safe_size)
             ).scalars().all()
             return list(rows), int(total)
+
+    @staticmethod
+    def _normalize_scope_value(value: Any) -> str:
+        normalized = str(value or "").strip()
+        return normalized or INTELLIGENCE_ITEM_NULL_SCOPE_VALUE
 
     def apply_retention(self, retention_days: int) -> int:
         cutoff = datetime.now() - timedelta(days=max(1, int(retention_days)))

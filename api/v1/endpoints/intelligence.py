@@ -32,8 +32,10 @@ def _not_found(message: str) -> HTTPException:
 
 
 def _internal_error(message: str, exc: Exception) -> HTTPException:
-    logger.error("%s: %s", message, exc, exc_info=True)
-    return HTTPException(status_code=500, detail={"error": "internal_error", "message": f"{message}: {str(exc)}"})
+    sanitized = IntelligenceService._sanitize_error(exc)
+    log_detail = sanitized if sanitized != str(exc) else exc.__class__.__name__
+    logger.error("%s: %s", message, log_detail)
+    return HTTPException(status_code=500, detail={"error": "internal_error", "message": message})
 
 
 @router.post("/sources", response_model=IntelligenceSourceItem, responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}}, summary="Create intelligence source")

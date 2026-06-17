@@ -10,10 +10,12 @@ import unittest
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
+from sqlalchemy.exc import IntegrityError
+
 from src.config import Config
 from src.repositories.intelligence_repo import IntelligenceRepository
 from src.services.intelligence_service import IntelligenceService, IntelligenceServiceError, _MAX_FEED_BYTES
-from src.storage import DatabaseManager, IntelligenceItem
+from src.storage import DatabaseManager, IntelligenceItem, INTELLIGENCE_ITEM_NULL_SCOPE_VALUE
 
 RSS_FIXTURE = b'<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel>\n<item><title>Policy support lifts AI supply chain</title><link>https://news.example.com/a</link><description>Market-level catalyst with evidence link.</description><pubDate>Wed, 17 Jun 2026 08:00:00 GMT</pubDate></item>\n<item><title>Second item</title><link>https://news.example.com/b</link><description>Second summary.</description></item>\n</channel></rss>'
 
@@ -186,6 +188,23 @@ class IntelligenceServiceTestCase(unittest.TestCase):
         self.assertIn("token=***", failures[0]["error"])
         self.assertNotIn("secret", failures[0]["error"])
 
+    def test_sanitize_error_redacts_common_query_secret_names(self) -> None:
+        sanitized = IntelligenceService._sanitize_error(
+            RuntimeError(
+                "failed url=https://feed.example/rss?access_token=first&auth-token=second"
+                " callback=https://feed.example/rss?api-key=third#secret=fourth"
+            )
+        )
+
+        self.assertNotIn("first", sanitized)
+        self.assertNotIn("second", sanitized)
+        self.assertNotIn("third", sanitized)
+        self.assertNotIn("fourth", sanitized)
+        self.assertIn("access_token=***", sanitized)
+        self.assertIn("auth-token=***", sanitized)
+        self.assertIn("api-key=***", sanitized)
+        self.assertIn("secret=***", sanitized)
+
     def test_fetch_enabled_sources_iterates_every_enabled_source(self) -> None:
         with self._public_dns():
             for index in range(101):
@@ -207,6 +226,38 @@ class IntelligenceServiceTestCase(unittest.TestCase):
         self.assertEqual(repo.apply_retention(30), 1)
         with DatabaseManager.get_instance().get_session() as session:
             self.assertEqual(session.query(IntelligenceItem).count(), 0)
+
+    def test_market_scope_item_uses_non_null_dedupe_key(self) -> None:
+        repo = IntelligenceRepository()
+        with self._public_dns():
+            source = self.service.create_source({
+                "name": "unique-market-feed",
+                "url": "https://feeds.example.com/rss.xml",
+                "scope_type": "market",
+                "market": "cn",
+            })
+        fields = {
+            "source_id": source["id"],
+            "source_name": "unique-market-feed",
+            "source_type": "rss",
+            "title": "same market item",
+            "summary": "summary",
+            "url": "https://news.example.com/unique",
+            "source": "unique-market-feed",
+            "published_at": datetime.now(),
+            "fetched_at": datetime.now(),
+            "scope_type": "market",
+            "scope_value": None,
+            "market": "cn",
+        }
+
+        self.assertEqual(repo.upsert_items([fields]), 1)
+        with DatabaseManager.get_instance().get_session() as session:
+            stored = session.query(IntelligenceItem).one()
+            self.assertEqual(stored.scope_value, INTELLIGENCE_ITEM_NULL_SCOPE_VALUE)
+            session.add(IntelligenceItem(**{**fields, "scope_value": INTELLIGENCE_ITEM_NULL_SCOPE_VALUE}))
+            with self.assertRaises(IntegrityError):
+                session.flush()
 
 
 if __name__ == "__main__":

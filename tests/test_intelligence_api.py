@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import requests
 import socket
 import tempfile
 import unittest
@@ -68,6 +69,33 @@ class IntelligenceApiTestCase(unittest.TestCase):
         resp = self.client.post("/api/v1/intelligence/sources", json={"name": "bad", "url": "http://localhost/rss.xml", "scope_type": "market"})
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json()["error"], "validation_error")
+
+    def test_fetch_error_does_not_expose_source_url_secret(self) -> None:
+        with self._public_dns():
+            create_resp = self.client.post(
+                "/api/v1/intelligence/sources",
+                json={
+                    "name": "secret-feed",
+                    "url": "https://feeds.example.com/rss.xml?token=secret",
+                    "scope_type": "market",
+                },
+            )
+        self.assertEqual(create_resp.status_code, 200)
+
+        response = self._mock_response()
+        response.raise_for_status.side_effect = requests.HTTPError(
+            "404 Client Error for url: https://feeds.example.com/rss.xml?token=secret"
+        )
+
+        with self._public_dns(), patch("src.services.intelligence_service.requests.get", return_value=response), self.assertLogs("api.v1.endpoints.intelligence", level="ERROR") as logs:
+            fetch_resp = self.client.post(f"/api/v1/intelligence/sources/{create_resp.json()['id']}/fetch")
+
+        self.assertEqual(fetch_resp.status_code, 500)
+        response_blob = str(fetch_resp.json())
+        log_blob = "\n".join(logs.output)
+        self.assertNotIn("secret", response_blob)
+        self.assertNotIn("token=secret", log_blob)
+        self.assertEqual(fetch_resp.json()["message"], "Fetch intelligence source failed")
 
 
 if __name__ == "__main__":

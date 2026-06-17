@@ -21,7 +21,7 @@ import requests
 
 from src.config import get_config
 from src.repositories.intelligence_repo import IntelligenceRepository
-from src.storage import IntelligenceSource
+from src.storage import IntelligenceSource, INTELLIGENCE_ITEM_NULL_SCOPE_VALUE
 
 logger = logging.getLogger(__name__)
 _ALLOWED_SOURCE_TYPES = {"rss", "atom"}
@@ -438,7 +438,9 @@ class IntelligenceService:
             "published_at": IntelligenceService._iso(item.published_at),
             "fetched_at": IntelligenceService._iso(item.fetched_at),
             "scope_type": item.scope_type,
-            "scope_value": item.scope_value,
+            "scope_value": None if (
+                item.scope_type == "market" and item.scope_value == INTELLIGENCE_ITEM_NULL_SCOPE_VALUE
+            ) else item.scope_value,
             "market": item.market,
         }
 
@@ -459,7 +461,7 @@ class IntelligenceService:
     @staticmethod
     def _sanitize_error(exc: Exception) -> str:
         return re.sub(
-            r"((?:^|[?&\s])(?:token|key|apikey|api_key|secret)=)[^&\s]+",
+            r"((?:^|[?&#\s])(?:access[_-]?token|auth[_-]?token|api[_-]?key|apikey|api_key|token|key|secret)=)[^&\s#]+",
             r"\1***",
             str(exc),
             flags=re.I,
