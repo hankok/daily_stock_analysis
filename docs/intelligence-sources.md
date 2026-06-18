@@ -37,13 +37,25 @@ NEWS_INTEL_MAX_ITEMS_PER_SOURCE=50
 NEWSNOW_BASE_URL=https://newsnow.busiyi.world
 ```
 
-`NEWSNOW_BASE_URL` 用于拼出 `GET {NEWSNOW_BASE_URL}/api/s?id=<source_id>`。当前默认值为公开示例实例 `https://newsnow.busiyi.world`，官方/上游链路与形态请以你实际接入实例文档为准；生产环境建议改成自建 NewsNow 实例，以避免公开示例实例不可用或限流。
+`NEWSNOW_BASE_URL` 用于拼出 `GET {NEWSNOW_BASE_URL}/api/s?id=<source_id>`。
 
-兼容性核验建议（非 mock）：
+**外部依赖兼容性说明：**
 
-- `curl -sS "${NEWSNOW_BASE_URL}/api/s?id=cls-hot" | python -c "import sys, json; data=json.load(sys.stdin); assert isinstance(data, dict); assert isinstance(data.get('items'), list); print('ok')"`
-- 若要手工核验 `status`、`id`、`items[].title`、`items[].url`/`mobileUrl`、`items[].pubDate`/`items[].extra.date` 这类字段，可与测试回归组合使用：`test_newsnow_source_fetches_json_items`。
-- 公共示例实例不做自动化上线级联通保障；若你依赖该实例，请在实际部署环境先做一次完整 GET 返回形态回归（示例代码见上），生产建议改用已确认的自有/可控实例。
+- **官方项目与部署指南**：https://github.com/qqhann/newsnow
+- **当前默认值** `https://newsnow.busiyi.world` 是公开示例实例，**非官方部署**，存在以下风险：
+  - 可能因官方维护、限流或停止服务而不可用
+  - 不保证稳定性、可靠性或数据准确性，仅用于演示和测试
+  - 每个用户都指向同一公开实例，可能遭遇限流
+- **生产环境强烈建议**：自建 NewsNow 实例或接入已确认可控的私有/企业部署，以确保稳定性和数据可靠性
+
+**API 契约兼容性核验（部署前必做）：**
+
+- 验证基础可达性和返回格式：
+  ```bash
+  curl -sS "${NEWSNOW_BASE_URL}/api/s?id=cls-hot" | python -c "import sys, json; data=json.load(sys.stdin); assert isinstance(data, dict) and isinstance(data.get('items'), list); print('OK')"
+  ```
+- 详细字段兼容性可参考自动化测试：`test_newsnow_source_fetches_json_items`，涵盖 `status`、`id`、`items[].title`、`items[].url`/`mobileUrl`、`items[].pubDate`/`items[].extra.date` 等字段
+- **部署实例不在自动化上线保障范围内**；如果依赖公开示例实例，部署前务必在实际生产环境执行上述验证
 
 ## API
 
