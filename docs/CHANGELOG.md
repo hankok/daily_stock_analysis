@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-- [修复] Web 股票自动补全补齐 JP/KR 市场建议徽标渲染，并放宽远端 stock-index 载荷校验的市场白名单以接纳 JP/KR；当前仅支持 `.T` / `.KS` / `.KQ` 后缀输入，未新增 bare-code 后端解析能力（如 `000660` / `005930` 自动补齐为 `.KS`）、`api/v1/endpoints/analysis.py`、`api/v1/endpoints/history.py`、`src/services/history_service.py`、`src/data/stock_index_loader.py` 等相关链路改造与历史/任务展示修复，也未新增 `tests/test_stock_index_loader.py`、`tests/test_analysis_api_contract.py`、`tests/test_analysis_history.py` 的回归；不改动 provider/model/base URL 与运行时配置清理/迁移语义。
+- [修复] Web 股票自动补全补齐 JP/KR 市场建议徽标渲染，并放宽远端 stock-index 载荷校验市场白名单；当前范围仅覆盖建议清单渲染与 remote payload 兼容，仍为 suffix-only 提交路径，不包含 bare-code 后端解析（如 `000660` / `005930` 自动补齐为 `.KS`）、历史/任务展示改造或后端链路扩展，也未改动 provider/model/base URL 与运行时配置清理/迁移语义。
 
 - [新功能] #1390 P6 将 DecisionSignal 复用到告警、通知和组合风险：告警触发关联 latest active 信号或创建最小 alert 信号，通知追加低敏信号摘要，持仓风险聚合 active sell/reduce/alert 信号并保持 fail-open。
 - [修复] #1722 修复 #1390 P6 DecisionSignal 在组合风险快照语义和默认聚合通知展示中的遗漏。
