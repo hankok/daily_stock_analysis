@@ -1951,9 +1951,22 @@ class AkshareFetcher(BaseFetcher):
                 return _get_rank_top_n(df, change_col, name, n)
             
         except Exception as e:
-            logger.warning(f"[Akshare] 东财接口获取行业板块排行失败: {e}，尝试新浪接口")
+            logger.warning(f"[Akshare] 东财接口获取行业板块排行失败: {e}，尝试同花顺接口")
 
-        # 东财失败后，尝试新浪接口
+        # 东财失败后，优先尝试同花顺接口（不同数据源，对云端 IP 更友好，行业分类与东财接近）
+        try:
+            self._set_random_user_agent()
+            self._enforce_rate_limit()
+
+            logger.info("[API调用] ak.stock_board_industry_summary_ths() 获取行业板块排行(同花顺)...")
+            df = ak.stock_board_industry_summary_ths()
+            if df is not None and not df.empty and '涨跌幅' in df.columns and '板块' in df.columns:
+                return _get_rank_top_n(df, '涨跌幅', '板块', n)
+
+        except Exception as e:
+            logger.warning(f"[Akshare] 同花顺接口获取行业板块排行失败: {e}，尝试新浪接口")
+
+        # 同花顺失败后，尝试新浪接口
         try:
             self._set_random_user_agent()
             self._enforce_rate_limit()
