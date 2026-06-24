@@ -306,7 +306,7 @@ class YfinanceFetcher(BaseFetcher):
         """
         ticker = yf.Ticker(yf_code)
         # 取近两日数据以计算涨跌幅
-        hist = ticker.history(period='2d')
+        hist = ticker.history(period='5d')
         if hist.empty:
             return None
         today_row = hist.iloc[-1]
@@ -680,7 +680,7 @@ class YfinanceFetcher(BaseFetcher):
                 volume = getattr(info, 'lastVolume', None) or getattr(info, 'last_volume', None)
             except Exception:
                 logger.debug("[Yfinance] fast_info 失败，尝试 history 方法")
-                hist = ticker.history(period='2d')
+                hist = ticker.history(period='5d')
                 if hist.empty:
                     logger.warning(f"[Yfinance] 无法获取 {yf_symbol} 的数据")
                     return None
@@ -783,7 +783,7 @@ class YfinanceFetcher(BaseFetcher):
             except Exception:
                 # 回退到 history 方法获取最新数据
                 logger.debug("[Yfinance] fast_info 失败，尝试 history 方法")
-                hist = ticker.history(period='2d')
+                hist = ticker.history(period='5d')
                 if hist.empty:
                     if is_us_symbol:
                         logger.warning(f"[Yfinance] 无法获取 {symbol} 的数据，尝试 Stooq 兜底")
