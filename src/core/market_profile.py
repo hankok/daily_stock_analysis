@@ -63,7 +63,7 @@ HK_PROFILE = MarketProfile(
     ],
     prompt_index_hint="分析恒生指数、恒生科技指数、国企指数等各指数走势特点",
     has_market_stats=False,
-    has_sector_rankings=False,
+    has_sector_rankings=True,  # 经 TradingView CDP 读取；不可用时优雅降级为空
 )
 
 
