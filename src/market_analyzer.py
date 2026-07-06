@@ -443,6 +443,10 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 
             if self.region == "us":
                 top_sectors, bottom_sectors = self._get_us_sector_rankings(5)
+            elif self.region == "hk":
+                # 港股板块经 TradingView（复用本机 Chrome CDP 会话）读取；TV 不可用时返回空并优雅降级
+                from data_provider.hk_sector_tv import get_hk_sector_rankings
+                top_sectors, bottom_sectors = get_hk_sector_rankings(5)
             else:
                 top_sectors, bottom_sectors = self.data_manager.get_sector_rankings(5)
 
