@@ -38,18 +38,20 @@ from data_provider.base import DataFetcherManager
 logger = logging.getLogger(__name__)
 
 
+# NOTE: `###[^\n]*?` (not `###\s*`) so an emoji BEFORE the marker (e.g. "### 🧭 一、盘面总览",
+# which agy/Gemini sometimes emits) still matches — otherwise data tables silently fail to inject.
 _ENGLISH_SECTION_PATTERNS = {
-    "market_summary": r"###\s*(?:1\.\s*)?Market Summary",
-    "index_commentary": r"###\s*(?:2\.\s*)?(?:Index Commentary|Major Indices)",
-    "sector_highlights": r"###\s*(?:4\.\s*)?(?:Sector Highlights|Sector/Theme Highlights)",
+    "market_summary": r"###[^\n]*?(?:1\.\s*)?Market Summary",
+    "index_commentary": r"###[^\n]*?(?:2\.\s*)?(?:Index Commentary|Major Indices)",
+    "sector_highlights": r"###[^\n]*?(?:4\.\s*)?(?:Sector Highlights|Sector/Theme Highlights)",
 }
 
 _CHINESE_SECTION_PATTERNS = {
-    "market_summary": r"###\s*一、(?:盘面总览|市场总结)",
-    "index_commentary": r"###\s*二、(?:指数结构|指数点评|主要指数)",
-    "sector_highlights": r"###\s*三、(?:板块主线|热点解读|板块表现)",
-    "funds_sentiment": r"###\s*四、(?:资金与情绪|资金动向)",
-    "news_catalysts": r"###\s*五、(?:消息催化|后市展望)",
+    "market_summary": r"###[^\n]*?一、(?:盘面总览|市场总结)",
+    "index_commentary": r"###[^\n]*?二、(?:指数结构|指数点评|主要指数)",
+    "sector_highlights": r"###[^\n]*?三、(?:板块主线|热点解读|板块表现)",
+    "funds_sentiment": r"###[^\n]*?四、(?:资金与情绪|资金动向)",
+    "news_catalysts": r"###[^\n]*?五、(?:消息催化|后市展望)",
 }
 
 
