@@ -50,7 +50,7 @@ US_PROFILE = MarketProfile(
     ],
     prompt_index_hint="分析标普500、纳斯达克、道指等各指数走势特点",
     has_market_stats=False,
-    has_sector_rankings=False,
+    has_sector_rankings=True,  # 用 SPDR 行业 ETF 近似板块涨跌榜
 )
 
 HK_PROFILE = MarketProfile(
