@@ -102,6 +102,9 @@ class MarketOverview:
     top_sectors: List[Dict] = field(default_factory=list)     # 涨幅前5板块
     bottom_sectors: List[Dict] = field(default_factory=list)  # 跌幅前5板块
 
+    # 南向资金净买入（亿元），仅港股复盘填充
+    southbound_net: Optional[float] = None
+
 
 @dataclass
 class MarketLightReviewResult:
@@ -348,13 +351,14 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         if self.profile.has_market_stats:
             self._get_market_statistics(overview)
 
-        # 3. 获取板块涨跌榜（A 股有，美股暂无）
+        # 3. 获取板块涨跌榜（A 股/美股 ETF 代理；港股走 TradingView，暂未接）
         if self.profile.has_sector_rankings:
             self._get_sector_rankings(overview)
-        
-        # 4. 获取北向资金（可选）
-        # self._get_north_flow(overview)
-        
+
+        # 4. 南向资金（仅港股复盘）
+        if self.region == "hk":
+            self._get_southbound_flow(overview)
+
         return overview
 
     
@@ -437,7 +441,10 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         try:
             logger.info("[大盘] %s action=get_sector_rankings status=start", self._log_context())
 
-            top_sectors, bottom_sectors = self.data_manager.get_sector_rankings(5)
+            if self.region == "us":
+                top_sectors, bottom_sectors = self._get_us_sector_rankings(5)
+            else:
+                top_sectors, bottom_sectors = self.data_manager.get_sector_rankings(5)
 
             if top_sectors or bottom_sectors:
                 overview.top_sectors = top_sectors
@@ -454,7 +461,66 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 
         except Exception as e:
             logger.error("[大盘] %s action=get_sector_rankings status=failed error=%s", self._log_context(), e)
-    
+
+    # SPDR 行业 ETF —— 作为美股板块涨跌榜的稳定代理（yfinance，全球可用）
+    _US_SECTOR_ETFS = [
+        ("XLK", "信息技术"), ("XLF", "金融"), ("XLE", "能源"),
+        ("XLV", "医疗保健"), ("XLY", "非必需消费"), ("XLP", "必需消费"),
+        ("XLI", "工业"), ("XLB", "原材料"), ("XLRE", "房地产"),
+        ("XLU", "公用事业"), ("XLC", "通信服务"),
+    ]
+
+    def _get_us_sector_rankings(self, n: int = 5):
+        """用 SPDR 行业 ETF 近两个交易日涨跌幅近似美股板块涨跌榜。"""
+        rows = []
+        try:
+            import yfinance as yf
+            for sym, name in self._US_SECTOR_ETFS:
+                try:
+                    hist = yf.Ticker(sym).history(period="5d")
+                    if len(hist) < 2:
+                        continue
+                    prev = float(hist["Close"].iloc[-2])
+                    last = float(hist["Close"].iloc[-1])
+                    if prev <= 0:
+                        continue
+                    rows.append({"name": name, "change_pct": (last / prev - 1.0) * 100})
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.warning("[大盘] %s action=get_us_sector_rankings status=failed error=%s", self._log_context(), e)
+            return [], []
+        if not rows:
+            return [], []
+        rows.sort(key=lambda r: r["change_pct"], reverse=True)
+        top = rows[:n]
+        bottom = list(reversed(rows[-n:]))
+        return top, bottom
+
+    def _get_southbound_flow(self, overview: MarketOverview):
+        """获取港股通南向资金净买入（亿元），来源 akshare 东财沪深港通汇总。"""
+        try:
+            logger.info("[大盘] %s action=get_southbound status=start", self._log_context())
+            import akshare as ak
+            import pandas as pd
+            df = ak.stock_hsgt_fund_flow_summary_em()
+            if df is None or df.empty or "资金方向" not in df.columns:
+                logger.warning("[大盘] %s action=get_southbound status=empty", self._log_context())
+                return
+            south = df[df["资金方向"] == "南向"]
+            col = "成交净买额" if "成交净买额" in df.columns else None
+            if col is None or south.empty:
+                logger.warning("[大盘] %s action=get_southbound status=empty_col", self._log_context())
+                return
+            net = pd.to_numeric(south[col], errors="coerce").dropna().sum()
+            overview.southbound_net = float(net)
+            logger.info(
+                "[大盘] %s action=get_southbound status=success net=%.1f亿",
+                self._log_context(), overview.southbound_net,
+            )
+        except Exception as e:
+            logger.error("[大盘] %s action=get_southbound status=failed error=%s", self._log_context(), e)
+
     # def _get_north_flow(self, overview: MarketOverview):
     #     """获取北向资金流入"""
     #     try:
@@ -794,7 +860,23 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                 sector_block,
             )
 
+        southbound_block = self._build_southbound_block(overview)
+        if southbound_block and patterns.get("funds_sentiment"):
+            review = self._insert_after_section(
+                review,
+                patterns["funds_sentiment"],
+                southbound_block,
+            )
+
         return review
+
+    def _build_southbound_block(self, overview: MarketOverview) -> str:
+        """Build the southbound (港股通) net-flow line for HK reviews."""
+        if getattr(overview, "southbound_net", None) is None:
+            return ""
+        if self._get_review_language() == "en":
+            return f"- **Southbound net buy**: {overview.southbound_net:+.1f} 亿 RMB (HK Connect total)"
+        return f"- **南向资金**：港股通今日合计净买入 {overview.southbound_net:+.1f} 亿元"
 
     @staticmethod
     def _insert_after_section(text: str, heading_pattern: str, block: str) -> str:
@@ -1228,6 +1310,19 @@ Lagging: {bottom_sectors_text if bottom_sectors_text else "N/A"}"""
 领跌: {bottom_sectors_text if bottom_sectors_text else "暂无数据"}"""
             else:
                 sector_block = "## 板块表现\n（该市场暂无板块涨跌数据）"
+
+        # 南向资金（港股）注入到提示词，供 LLM 在资金与情绪段落引用
+        if overview.southbound_net is not None:
+            if review_language == "en":
+                stats_block += (
+                    f"\n\n## Southbound Flow\n- HK Connect net buy today: "
+                    f"{overview.southbound_net:+.1f} 亿 (RMB)"
+                )
+            else:
+                stats_block += (
+                    f"\n\n## 南向资金\n- 港股通南向今日合计净买入: "
+                    f"{overview.southbound_net:+.1f} 亿元"
+                )
 
         data_no_indices_hint = (
             "注意：由于行情数据获取失败，请主要根据【市场新闻】进行定性分析和总结，不要编造具体的指数点位。"
