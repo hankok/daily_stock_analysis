@@ -52,6 +52,9 @@ import os
 
 logger = logging.getLogger(__name__)
 
+# S&P 500 constituent list cache (24h) for the US market-breadth calc — see get_us_market_stats
+_SP500_CACHE: Dict[str, Any] = {"ts": 0.0, "syms": []}
+
 
 class YfinanceFetcher(BaseFetcher):
     """
@@ -380,6 +383,74 @@ class YfinanceFetcher(BaseFetcher):
             logger.error(f"[Yfinance] 获取 A 股指数行情失败: {e}")
 
         return None
+
+    # ── 美股市场广度 ────────────────────────────────────────────────────────────
+    # 美股没有 A 股那样的官方涨跌家数接口（Yahoo 的 ^ADVN/^DECN 等已下线），因此用
+    # 标普 500 成分股现算：昨收 vs 最新收盘 → 上涨/下跌/平盘家数 + 成交额（亿美元）。
+    def _sp500_symbols(self) -> List[str]:
+        """标普 500 成分股列表（维基百科，缓存 24h）。失败返回缓存或空列表（优雅降级）。"""
+        import time as _t
+        cache = _SP500_CACHE
+        if cache["syms"] and _t.time() - cache["ts"] < 86400:
+            return cache["syms"]
+        try:
+            req = Request("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+                          headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+            html = urlopen(req, timeout=25).read().decode()
+            tbl = pd.read_html(StringIO(html))[0]
+            # yfinance 用连字符：BRK.B -> BRK-B, BF.B -> BF-B
+            syms = [str(s).replace(".", "-").strip() for s in tbl["Symbol"].tolist() if s]
+            if len(syms) > 400:
+                cache["syms"], cache["ts"] = syms, _t.time()
+        except Exception as e:
+            logger.warning("[MarketStats] component=us_breadth action=sp500_list_failed error=%s", e)
+        return cache["syms"]
+
+    def get_us_market_stats(self) -> Optional[Dict[str, Any]]:
+        """美股市场广度：标普 500 成分股上涨/下跌/平盘家数 + 成交额（亿美元）。
+        美股无涨跌停，limit_up/down 恒为 0。数据不足时返回 None（优雅降级）。"""
+        import yfinance as yf
+
+        syms = self._sp500_symbols()
+        if not syms:
+            logger.warning("[MarketStats] component=us_breadth action=no_constituents")
+            return None
+        try:
+            df = yf.download(syms, period="2d", auto_adjust=False, group_by="ticker",
+                             threads=True, progress=False)
+        except Exception as e:
+            logger.warning("[MarketStats] component=us_breadth action=download_failed error=%s", e)
+            return None
+
+        up = down = flat = 0
+        amount = 0.0
+        for s in syms:
+            try:
+                d = df[s].dropna()
+                if len(d) < 2:
+                    continue
+                prev = float(d["Close"].iloc[-2])
+                last = float(d["Close"].iloc[-1])
+                amount += last * float(d["Volume"].iloc[-1])
+                if last > prev:
+                    up += 1
+                elif last < prev:
+                    down += 1
+                else:
+                    flat += 1
+            except Exception:
+                continue
+
+        if up + down + flat == 0:
+            logger.warning("[MarketStats] component=us_breadth action=empty_after_calc")
+            return None
+        logger.info("[MarketStats] component=us_breadth provider=YfinanceFetcher action=success "
+                    "up=%d down=%d flat=%d amount=%.0f亿USD", up, down, flat, amount / 1e8)
+        return {
+            "up_count": up, "down_count": down, "flat_count": flat,
+            "limit_up_count": 0, "limit_down_count": 0,   # 美股无涨跌停
+            "total_amount": amount / 1e8,                 # 亿美元（与 A 股同单位口径）
+        }
 
     def _get_us_main_indices(self, yf) -> Optional[List[Dict[str, Any]]]:
         """获取美股主要指数行情（SPX、IXIC、DJI、VIX），复用 _fetch_yf_ticker_data"""

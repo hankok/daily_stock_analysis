@@ -349,7 +349,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         # 1. 获取主要指数行情（按 region 切换 A 股/美股）
         overview.indices = self._get_main_indices()
 
-        # 2. 获取涨跌统计（A 股有，美股无等效数据）
+        # 2. 获取涨跌统计（A 股用 akshare；美股由标普500成分股经 yfinance 现算广度）
         if self.profile.has_market_stats:
             self._get_market_statistics(overview)
 
@@ -411,7 +411,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         try:
             logger.info("[大盘] %s action=get_market_stats status=start", self._log_context())
 
-            stats = self.data_manager.get_market_stats(purpose=f"market_review:{self.region}")
+            stats = self.data_manager.get_market_stats(purpose=f"market_review:{self.region}", region=self.region)
 
             if stats:
                 overview.up_count = stats.get('up_count', 0)

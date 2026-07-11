@@ -2388,9 +2388,29 @@ class DataFetcherManager:
                 continue
         return []
 
-    def get_market_stats(self, *, purpose: str = "unspecified") -> Dict[str, Any]:
-        """获取市场涨跌统计（自动切换数据源）"""
-        logger.info("[MarketStats] component=market_stats action=start purpose=%s", purpose)
+    def get_market_stats(self, *, purpose: str = "unspecified", region: str = "cn") -> Dict[str, Any]:
+        """获取市场涨跌统计（自动切换数据源）。region=us 时走标普500成分股广度（yfinance）。"""
+        logger.info("[MarketStats] component=market_stats action=start purpose=%s region=%s", purpose, region)
+        if region == "us":
+            # 美股无官方涨跌家数接口 —— 由 YfinanceFetcher 从标普500成分股现算广度
+            yf_fetcher = next((f for f in self._fetchers if getattr(f, "name", "") == "YfinanceFetcher"), None)
+            if yf_fetcher is not None and hasattr(yf_fetcher, "get_us_market_stats"):
+                started_at = time.monotonic()
+                try:
+                    data = yf_fetcher.get_us_market_stats()
+                    elapsed = time.monotonic() - started_at
+                    if data:
+                        logger.info("[MarketStats] component=market_stats action=provider_success "
+                                    "purpose=%s provider=YfinanceFetcher(us) elapsed=%.2fs", purpose, elapsed)
+                        return data
+                    logger.info("[MarketStats] component=market_stats action=provider_empty "
+                                "purpose=%s provider=YfinanceFetcher(us) elapsed=%.2fs", purpose, elapsed)
+                except Exception as e:
+                    logger.warning("[MarketStats] component=market_stats action=provider_failed "
+                                   "purpose=%s provider=YfinanceFetcher(us) error=%s", purpose, e)
+            logger.warning("[MarketStats] component=market_stats action=complete status=empty "
+                           "purpose=%s region=us", purpose)
+            return {}
         tickflow_fetcher = self._get_tickflow_fetcher()
         if tickflow_fetcher is not None:
             started_at = time.monotonic()
