@@ -195,6 +195,33 @@ class MarketAnalyzer:
             return f"{amount_raw / 1e8:.0f}"
         return f"{amount_raw:.0f}"
 
+    def _shows_limit_stats(self) -> bool:
+        """涨停/跌停 only exists under A股's daily price-limit rule; US/HK markets have none."""
+        return self.region == "cn"
+
+    def _stats_turnover_label(self) -> str:
+        """A股 turnover is the Shanghai+Shenzhen '两市' aggregate; US/HK have no '两市' concept."""
+        return "两市成交额" if self.region == "cn" else "总成交额"
+
+    def _stats_turnover_unit(self) -> str:
+        """Currency unit for the breadth-block turnover (kept at the 亿 / hundred-million scale)."""
+        en = self._get_review_language() == "en"
+        if self.region == "us":
+            return "USD 100m" if en else "亿美元"
+        if self.region == "hk":
+            return "HKD 100m" if en else "亿港元"
+        return "CNY 100m" if en else "亿元"
+
+    def _breadth_term(self) -> str:
+        """Prompt hint: 涨跌停结构 only for A股; other markets have no price-limit structure."""
+        return "涨跌停结构" if self.region == "cn" else "涨跌家数结构"
+
+    def _is_directional_index(self, idx: MarketIndex) -> bool:
+        """Exclude volatility gauges (e.g. VIX) — they move inverse to price, so averaging them
+        into a 'major-index change' flips the breadth signal (VIX up on a down day reads bullish)."""
+        tag = f"{idx.code} {idx.name}".upper()
+        return "VIX" not in tag and "VOLATIL" not in tag and "恐慌" not in idx.name
+
     def _get_index_change_arrow(self, change_pct: float) -> str:
         if change_pct == 0:
             return "⚪"
@@ -910,6 +937,13 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             return ""
         if self._get_review_language() == "en":
             light = self.build_market_light_snapshot(overview)
+            breadth = (
+                f"- **Breadth**: Advancers {overview.up_count} / Decliners {overview.down_count} / "
+                f"Flat {overview.flat_count}"
+            )
+            if self._shows_limit_stats():
+                breadth += f"; Limit-up {overview.limit_up_count} / Limit-down {overview.limit_down_count}"
+            breadth += f"; Turnover {overview.total_amount:.0f} ({self._stats_turnover_unit()})"
             return "\n".join(
                 [
                     f"- **Market Signal**: {light['score']}/100 "
@@ -917,17 +951,13 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                     f"- **Drivers**: {'; '.join(light['reasons'])}",
                     f"- **Guidance**: {light['guidance']}",
                     "",
-                    f"- **Breadth**: Advancers {overview.up_count} / Decliners {overview.down_count} / "
-                    f"Flat {overview.flat_count}; "
-                    f"Limit-up {overview.limit_up_count} / Limit-down {overview.limit_down_count}; "
-                    f"Turnover {overview.total_amount:.0f} ({self._get_turnover_unit_label()})",
+                    breadth,
                 ]
             )
         light = self.build_market_light_snapshot(overview)
         score, label = light["score"], light["temperature_label"]
         participation = overview.up_count + overview.down_count
         up_ratio = overview.up_count / participation if participation else 0.0
-        limit_spread = overview.limit_up_count - overview.limit_down_count
         lines = [
             f"- **盘面信号**：{score}/100（{label}，{light['label']}）",
             f"- **信号依据**：{'；'.join(light['reasons'])}",
@@ -936,9 +966,16 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             "| 指标 | 数值 | 观察 |",
             "|------|------|------|",
             f"| 上涨/下跌/平盘 | {overview.up_count} / {overview.down_count} / {overview.flat_count} | 上涨占比(不含平盘) {up_ratio:.1%} |",
-            f"| 涨停/跌停 | {overview.limit_up_count} / {overview.limit_down_count} | 涨跌停差 {limit_spread:+d} |",
-            f"| 两市成交额 | {overview.total_amount:.0f} 亿 | {self._describe_turnover(overview.total_amount)} |",
         ]
+        if self._shows_limit_stats():
+            limit_spread = overview.limit_up_count - overview.limit_down_count
+            lines.append(
+                f"| 涨停/跌停 | {overview.limit_up_count} / {overview.limit_down_count} | 涨跌停差 {limit_spread:+d} |"
+            )
+        lines.append(
+            f"| {self._stats_turnover_label()} | {overview.total_amount:.0f} {self._stats_turnover_unit()} | "
+            f"{self._describe_turnover(overview.total_amount)} |"
+        )
         return "\n".join(lines)
 
     def build_market_light_snapshot(self, overview: MarketOverview) -> Dict[str, Any]:
@@ -1003,14 +1040,16 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                 reasons.append(f"上涨家数占比 {up_ratio:.0%}，亏钱效应较强")
             else:
                 reasons.append(f"上涨家数占比 {up_ratio:.0%}，市场分化")
-        index_changes = [idx.change_pct for idx in overview.indices if idx.change_pct is not None]
+        index_changes = [idx.change_pct for idx in overview.indices
+                         if idx.change_pct is not None and self._is_directional_index(idx)]
         if index_changes:
             avg_change = sum(index_changes) / len(index_changes)
             reasons.append(f"主要指数平均涨跌幅 {avg_change:+.2f}%")
-        if overview.limit_up_count or overview.limit_down_count:
+        if self._shows_limit_stats() and (overview.limit_up_count or overview.limit_down_count):
             reasons.append(f"涨跌停差 {overview.limit_up_count - overview.limit_down_count:+d}")
         if not reasons and overview.total_amount:
-            reasons.append(f"成交额 {overview.total_amount:.0f} 亿，{self._describe_turnover(overview.total_amount)}")
+            reasons.append(f"成交额 {overview.total_amount:.0f} {self._stats_turnover_unit()}，"
+                           f"{self._describe_turnover(overview.total_amount)}")
         if not reasons:
             reasons.append("结构化涨跌数据有限，按可用行情综合判断")
         return reasons[:4]
@@ -1026,14 +1065,15 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                 reasons.append(f"advancers ratio {up_ratio:.0%}, downside pressure dominates")
             else:
                 reasons.append(f"advancers ratio {up_ratio:.0%}, breadth is mixed")
-        index_changes = [idx.change_pct for idx in overview.indices if idx.change_pct is not None]
+        index_changes = [idx.change_pct for idx in overview.indices
+                         if idx.change_pct is not None and self._is_directional_index(idx)]
         if index_changes:
             avg_change = sum(index_changes) / len(index_changes)
             reasons.append(f"average major-index change {avg_change:+.2f}%")
-        if overview.limit_up_count or overview.limit_down_count:
+        if self._shows_limit_stats() and (overview.limit_up_count or overview.limit_down_count):
             reasons.append(f"limit-up/down spread {overview.limit_up_count - overview.limit_down_count:+d}")
         if not reasons and overview.total_amount:
-            reasons.append(f"turnover {overview.total_amount:.0f} ({self._get_turnover_unit_label()})")
+            reasons.append(f"turnover {overview.total_amount:.0f} ({self._stats_turnover_unit()})")
         if not reasons:
             reasons.append("limited structured breadth data; using available market inputs")
         return reasons[:4]
@@ -1049,7 +1089,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             ]
         else:
             lines = [
-                "| 指数 | 最新 | 涨跌幅 | 开盘 | 最高 | 最低 | 振幅 | 成交额(亿) |",
+                f"| 指数 | 最新 | 涨跌幅 | 开盘 | 最高 | 最低 | 振幅 | 成交额({self._get_turnover_unit_label()}) |",
                 "|------|------|--------|------|------|------|------|-----------|",
             ]
         for idx in overview.indices:
@@ -1288,10 +1328,14 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         sector_block = ""
         if review_language == "en":
             if self.profile.has_market_stats:
-                stats_block = f"""## Market Breadth
-- Advancers: {overview.up_count} | Decliners: {overview.down_count} | Flat: {overview.flat_count}
-- Limit-up: {overview.limit_up_count} | Limit-down: {overview.limit_down_count}
-- Turnover: {overview.total_amount:.0f} ({self._get_turnover_unit_label()})"""
+                _sl = [
+                    "## Market Breadth",
+                    f"- Advancers: {overview.up_count} | Decliners: {overview.down_count} | Flat: {overview.flat_count}",
+                ]
+                if self._shows_limit_stats():
+                    _sl.append(f"- Limit-up: {overview.limit_up_count} | Limit-down: {overview.limit_down_count}")
+                _sl.append(f"- Turnover: {overview.total_amount:.0f} ({self._stats_turnover_unit()})")
+                stats_block = "\n".join(_sl)
             else:
                 stats_block = "## Market Breadth\n(No equivalent advance/decline statistics are available for this market.)"
 
@@ -1303,10 +1347,14 @@ Lagging: {bottom_sectors_text if bottom_sectors_text else "N/A"}"""
                 sector_block = "## Sector Performance\n(Sector data not available for this market.)"
         else:
             if self.profile.has_market_stats:
-                stats_block = f"""## 市场概况
-- 上涨: {overview.up_count} 家 | 下跌: {overview.down_count} 家 | 平盘: {overview.flat_count} 家
-- 涨停: {overview.limit_up_count} 家 | 跌停: {overview.limit_down_count} 家
-- 两市成交额: {overview.total_amount:.0f} 亿元"""
+                _sl = [
+                    "## 市场概况",
+                    f"- 上涨: {overview.up_count} 家 | 下跌: {overview.down_count} 家 | 平盘: {overview.flat_count} 家",
+                ]
+                if self._shows_limit_stats():
+                    _sl.append(f"- 涨停: {overview.limit_up_count} 家 | 跌停: {overview.limit_down_count} 家")
+                _sl.append(f"- {self._stats_turnover_label()}: {overview.total_amount:.0f} {self._stats_turnover_unit()}")
+                stats_block = "\n".join(_sl)
             else:
                 stats_block = "## 市场概况\n（该市场暂无涨跌家数等统计）"
 
@@ -1461,7 +1509,7 @@ Output the report content directly, no extra commentary.
 （分析领涨/领跌板块背后的逻辑、持续性和是否形成主线）
 
 ### 四、资金与情绪
-（解读成交额、涨跌停结构、市场宽度和风险偏好）
+（解读成交额、{self._breadth_term()}、市场宽度和风险偏好）
 
 ### 五、消息催化
 （结合近三日新闻，提炼真正影响明日交易的催化或扰动）

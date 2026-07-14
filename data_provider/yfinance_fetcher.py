@@ -503,6 +503,7 @@ class YfinanceFetcher(BaseFetcher):
                     logger.warning(f"[Yfinance] 获取港股指数 {name} 失败: {e}")
 
             if results:
+                results = self._enrich_hk_with_akshare(results)
                 logger.info(f"[Yfinance] 成功获取 {len(results)} 个港股指数行情")
                 return results
 
@@ -510,6 +511,55 @@ class YfinanceFetcher(BaseFetcher):
             logger.error(f"[Yfinance] 获取港股指数行情失败: {e}")
 
         return None
+
+    def _enrich_hk_with_akshare(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """用 akshare 新浪港股指数日线补齐 Yahoo 缺口，best-effort（任何失败都保留 Yahoo 原值）：
+
+        1. 成交额(amount)：Yahoo 不提供港股指数成交额，用新浪日线的真实成交额覆盖。
+        2. 涨跌幅修复：Yahoo 的 ``HSTECH.HK`` 只返回单行历史，导致 ``prev_close == current`` →
+           涨跌幅恒为 0.00%（恒生科技指数长期显示 +0.00% 的根因）。当检测到这种退化结果时，
+           用新浪日线的最近两根收盘重算 涨跌点/涨跌幅/振幅。^HSI、^HSCE 正常返回多行，不受影响。
+        """
+        if not results:
+            return results
+        try:
+            import akshare as ak
+        except Exception:
+            return results
+        for item in results:
+            sym = item.get('code')                          # HSI / HSTECH / HSCEI 与新浪符号一致
+            if sym not in ('HSI', 'HSTECH', 'HSCEI'):
+                continue
+            try:
+                df = ak.stock_hk_index_daily_sina(symbol=sym)
+                if df is None or len(df) < 1:
+                    continue
+                last = df.iloc[-1]
+                amount = float(last.get('amount') or 0.0)
+                if amount > 0:
+                    item['amount'] = amount                  # 真实成交额（港元），供成交额列展示
+                degenerate = (
+                    (item.get('change_pct') or 0) == 0
+                    and item.get('current') == item.get('prev_close')
+                )
+                if degenerate and len(df) >= 2:
+                    prev = df.iloc[-2]
+                    cur_close, prev_close = float(last['close']), float(prev['close'])
+                    hi, lo = float(last['high']), float(last['low'])
+                    item['current'] = cur_close
+                    item['prev_close'] = prev_close
+                    item['open'] = float(last['open'])
+                    item['high'] = hi
+                    item['low'] = lo
+                    if prev_close:
+                        item['change'] = cur_close - prev_close
+                        item['change_pct'] = (cur_close - prev_close) / prev_close * 100
+                        item['amplitude'] = (hi - lo) / prev_close * 100
+                    logger.info(
+                        f"[akshare] 修复港股指数 {item.get('name')} 涨跌幅 -> {item['change_pct']:+.2f}%")
+            except Exception as e:
+                logger.warning(f"[akshare] 港股指数 {sym} 补数失败: {str(e)[:80]}")
+        return results
 
     def _get_jp_main_indices(self, yf) -> Optional[List[Dict[str, Any]]]:
         """获取日本主要指数行情（日经225、TOPIX），复用 _fetch_yf_ticker_data。"""
