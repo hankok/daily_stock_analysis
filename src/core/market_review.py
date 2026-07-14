@@ -256,14 +256,26 @@ def run_market_review(
                 language=getattr(runtime_config, "report_language", "zh"),
                 root_title=review_text["root_title"],
             )
+            # Single-region files are headed by the REGION title (e.g. "# A股大盘复盘") — the
+            # anchor the web readers (/api/brief _split_region, make_cards.parse_region) split
+            # on — rather than the "# 🎯 大盘复盘" root wrapper used for the combined file.
+            if len(run_markets) == 1:
+                _tk = next((tk for mkt, tk, _ in _MARKET_REVIEW_MARKETS if mkt == run_markets[0]), None)
+                _wrapper_title = review_text.get(_tk) or review_text["root_title"]
+            else:
+                _wrapper_title = review_text["root_title"]
             markdown_report = _render_market_review_payload_markdown(
                 market_review_payload,
-                wrapper_title=review_text["root_title"],
+                wrapper_title=_wrapper_title,
             )
             if save_report_file:
                 # 保存报告到文件
                 date_str = datetime.now().strftime('%Y%m%d')
-                report_filename = f"market_review_{date_str}.md"
+                report_filename = (
+                    f"market_review_{run_markets[0]}_{date_str}.md"
+                    if len(run_markets) == 1
+                    else f"market_review_{date_str}.md"
+                )
                 filepath = notifier.save_report_to_file(
                     markdown_report,
                     report_filename
