@@ -911,9 +911,18 @@ class EfinanceFetcher(BaseFetcher):
                     'amplitude': safe_float(item.get(amp_col, 0)),
                 })
 
-            if results:
-                logger.info(f"[efinance] 获取到 {len(results)} 个指数行情")
-            return results if results else None
+            # 完整性校验：'沪深系列指数' 实时组不含科创50(000688)，只会返回 5/6 且无振幅。
+            # 此前 efinance 接口宕机、akshare 兜底才恰好完整；接口恢复后残缺结果会顶掉 akshare。
+            # 缺任一指数即返回 None，让上层回退到能给全 6 个指数(含科创50)+振幅的数据源(akshare)。
+            if len(results) != len(indices_map):
+                missing = [nm for cd, (nm, _) in indices_map.items()
+                           if not any(r["name"] == nm for r in results)]
+                logger.warning(
+                    "[efinance] 指数行情不完整: %s/%s（缺 %s），回退其他数据源",
+                    len(results), len(indices_map), "、".join(missing) or "?")
+                return None
+            logger.info(f"[efinance] 获取到 {len(results)} 个指数行情")
+            return results
         except Exception as e:
             logger.error(f"[efinance] 获取指数行情失败: {e}")
             return None
