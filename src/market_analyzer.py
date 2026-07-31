@@ -447,6 +447,14 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                 overview.limit_up_count = stats.get('limit_up_count', 0)
                 overview.limit_down_count = stats.get('limit_down_count', 0)
                 overview.total_amount = stats.get('total_amount', 0.0)
+                # Feed the baseline with the authoritative number this run just used, so the
+                # window keeps extending on its own and tomorrow can be judged against today.
+                if self.region == "cn" and overview.total_amount:
+                    try:
+                        from src.services import turnover_history
+                        turnover_history.record_today(str(overview.date)[:10], overview.total_amount)
+                    except Exception as e:
+                        logger.warning("[量能] record_today skipped: %s", e)
 
                 logger.info(
                     "[大盘] %s action=get_market_stats status=success up=%s down=%s flat=%s "
@@ -976,6 +984,20 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             f"| {self._stats_turnover_label()} | {overview.total_amount:.0f} {self._stats_turnover_unit()} | "
             f"{self._describe_turnover(overview.total_amount)} |"
         )
+        ctx = self._turnover_context(overview.total_amount)
+        if ctx:
+            lines.append("")
+            lines.append(
+                f"- **量能基准**（近 {ctx['sessions']} 个交易日）：中位数 {ctx['median']:.0f} 亿、"
+                f"四分位 {ctx['p25']:.0f}–{ctx['p75']:.0f} 亿、区间最高 {ctx['max']:.0f} 亿；"
+                f"今日 {overview.total_amount:.0f} 亿处于 {ctx['percentile']:.0f}% 分位"
+                f"（较中位数 {ctx['vs_median_pct']:+.1f}%）。"
+            )
+            lines.append(
+                f"- **量能对比**：较上一交易日（{ctx['prev_date']} {ctx['prev']:.0f} 亿）"
+                f"{ctx['vs_prev_pct']:+.1f}%；较近 5 日均值（{ctx['week_avg']:.0f} 亿）"
+                f"{ctx['vs_week_pct']:+.1f}%。"
+            )
         return "\n".join(lines)
 
     def build_market_light_snapshot(self, overview: MarketOverview) -> Dict[str, Any]:
@@ -1218,15 +1240,42 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
     def _escape_markdown_link_label(value: str) -> str:
         return value.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
 
-    @staticmethod
-    def _describe_turnover(total_amount: float) -> str:
-        if total_amount >= 15000:
-            return "高活跃度"
-        if total_amount >= 9000:
-            return "中等活跃"
-        if total_amount > 0:
-            return "缩量观望"
-        return "暂无数据"
+    def _turnover_context(self, total_amount: float):
+        """Where today's turnover sits in its own recent distribution (A股 only), or None.
+
+        Cached per review so the table, the signal reasons and the prompt all quote one set of
+        numbers instead of recomputing (and possibly disagreeing) three times."""
+        if getattr(self, "region", "") != "cn" or not total_amount:
+            return None
+        if getattr(self, "_turnover_ctx_cache", None) is not None:
+            return self._turnover_ctx_cache or None
+        ctx = None
+        try:
+            from src.services import turnover_history
+            ctx = turnover_history.context(total_amount)
+        except Exception as e:
+            logger.warning("[量能] context unavailable: %s", e)
+        self._turnover_ctx_cache = ctx or {}
+        return ctx
+
+    def _describe_turnover(self, total_amount: float) -> str:
+        """Judge 量能 RELATIVE to the last ~6 months, never on an absolute threshold.
+
+        The old ladder (>=15000亿 -> 高活跃度) was written when 2万亿 was a big day, so by 2026 it
+        labelled 2.5万亿 and 1.5万亿 identically. Worse, it was the only turnover cue the review
+        model got, so with no reference frame the model supplied a stale one of its own and
+        called an ordinary 2.5万亿 session a 天量. Say where today actually sits instead — and
+        when there is no baseline, say THAT rather than guess a level."""
+        if not total_amount or total_amount <= 0:
+            return "暂无数据"
+        if getattr(self, "region", "") != "cn":
+            return "活跃" if total_amount > 0 else "暂无数据"
+        try:
+            from src.services import turnover_history
+            return turnover_history.describe(total_amount, self._turnover_context(total_amount))
+        except Exception as e:
+            logger.warning("[量能] describe failed: %s", e)
+            return "量能基准数据不足，暂不判断高低"
 
     def _build_market_light_scores(self, overview: MarketOverview) -> Dict[str, Any]:
         """Build the canonical Market Light scores used by reports and alerts."""
@@ -1500,7 +1549,9 @@ Output the report content directly, no extra commentary.
 > 一句话给出今日市场状态、核心矛盾和明日优先观察方向。
 
 ### 一、盘面总览
-（2-3句话概括指数、涨跌家数、成交额和情绪温度，明确“强势/偏暖/震荡/偏弱”判断）
+（2-3句话概括指数、涨跌家数、成交额和情绪温度，明确“强势/偏暖/震荡/偏弱”判断。
+成交额必须结合上文「量能基准」的分位与对比来说，禁止凭绝对数值下“天量/地量/创纪录”一类结论——
+2万亿在今天早已不是天量；只有分位接近 100% 才谈得上极端。）
 
 ### 二、指数结构
 （{self._get_index_hint()}，说明谁在护盘、谁在拖累，以及关键支撑/压力）
