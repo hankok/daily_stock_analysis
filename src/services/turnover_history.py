@@ -27,6 +27,7 @@ import datetime as _dt
 import json
 import logging
 import os
+import socket
 import time
 from typing import Dict, Optional
 
@@ -45,18 +46,41 @@ BASELINE_SESSIONS = 120        # ~6 months of trading days
 WEEK_SESSIONS = 5
 
 
+# akshare takes no timeout argument, and these endpoints will occasionally accept the connection
+# and then never answer — the first backfill sat 14 minutes on a single date with the socket open
+# and no way to notice. A default socket timeout is the only lever that reaches inside akshare.
+FETCH_TIMEOUT = 25.0
+
+
+def _with_timeout(fn):
+    prev = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(FETCH_TIMEOUT)
+    try:
+        return fn()
+    finally:
+        socket.setdefaulttimeout(prev)
+
+
 def _sse_yi(ymd: str) -> Optional[float]:
     import akshare as ak
-    df = ak.stock_sse_deal_daily(date=ymd)
-    row = df[df["单日情况"] == "成交金额"]
-    return float(row["股票"].iloc[0]) if len(row) else None
+
+    def go():
+        df = ak.stock_sse_deal_daily(date=ymd)
+        row = df[df["单日情况"] == "成交金额"]
+        return float(row["股票"].iloc[0]) if len(row) else None
+
+    return _with_timeout(go)
 
 
 def _szse_yi(ymd: str) -> Optional[float]:
     import akshare as ak
-    df = ak.stock_szse_summary(date=ymd)
-    row = df[df["证券类别"] == "股票"]
-    return float(row["成交金额"].iloc[0]) / 1e8 if len(row) else None
+
+    def go():
+        df = ak.stock_szse_summary(date=ymd)
+        row = df[df["证券类别"] == "股票"]
+        return float(row["成交金额"].iloc[0]) / 1e8 if len(row) else None
+
+    return _with_timeout(go)
 
 
 def load() -> Dict[str, float]:
@@ -106,8 +130,12 @@ def backfill(days_back: int = 400, sleep: float = 0.4, verbose: bool = False) ->
         ymd = key.replace("-", "")
         try:
             a, b = _sse_yi(ymd), _szse_yi(ymd)
-        except Exception:
-            continue                                          # holiday / not published
+        except Exception as e:
+            # Holidays legitimately return nothing; a timeout is different and worth seeing,
+            # and neither is cached, so both are retried on the next run.
+            if verbose:
+                print("%s  skipped (%s)" % (key, str(e)[:60]))
+            continue
         if not a or not b:
             continue
         hist[key] = round((a + b) / SCALE, 1)
